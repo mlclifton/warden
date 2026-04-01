@@ -94,6 +94,18 @@ log_step 2 "Checking Incus Service & Access"
 if command -v incus &>/dev/null; then
     if incus info &>/dev/null; then
         log_success "Incus daemon is reachable and you have permission."
+        
+        # Check for idmap (subuid/subgid for root)
+        if ! grep -q "^root:" /etc/subuid 2>/dev/null || ! grep -q "^root:" /etc/subgid 2>/dev/null; then
+            log_warn "System may lack a functional idmap for unprivileged containers."
+            log_info "Recommendation: Add mappings for 'root' to /etc/subuid and /etc/subgid:"
+            echo "    sudo sh -c 'echo \"root:1000000:65536\" >> /etc/subuid'"
+            echo "    sudo sh -c 'echo \"root:1000000:65536\" >> /etc/subgid'"
+            echo "    sudo systemctl restart incus"
+            if [ "$DRY_RUN" = false ]; then
+                log_warn "If container creation fails, please run the commands above."
+            fi
+        fi
     else
         if groups | grep -q "incus-admin"; then
             execute "Start incus service" "sudo systemctl start incus"
