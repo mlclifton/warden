@@ -272,6 +272,11 @@ cmd_destroy() {
     exit 1
   fi
 
+  if ! incus info "$name" &>/dev/null; then
+    log_error "Instance '$name' not found. Run '$0 list' to see available jails."
+    exit 1
+  fi
+
   log_info "Destroying container $name..."
   incus delete "$name" --force
 
