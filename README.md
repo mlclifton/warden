@@ -1,6 +1,6 @@
 # Warden: AI Coding Sandboxes via Incus
 
-Warden is a CLI utility for managing isolated, high-performance development environments (jails) using **Incus** system containers. It is specifically designed to provide secure, performant, and flexible sandboxes for working with AI coding agents (like Gemini CLI or OpenCode). For the original design goals and requirements, see [warden_prd.md](warden_prd.md).
+Warden is a CLI utility for managing isolated, high-performance development environments (jails) using **Incus** system containers. It is specifically designed to provide secure, performant, and flexible sandboxes for working with AI coding agents (like Gemini CLI or OpenCode). For the original design goals and requirements, see [docs/warden_prd.md](docs/warden_prd.md).
 
 ## 🚀 Quick Start
 
@@ -24,13 +24,13 @@ Warden is a CLI utility for managing isolated, high-performance development envi
 ./warden.sh destroy my-project
 ```
 
-See the [user_guide.md](user_guide.md) for more detailed usage instructions.
+See the [docs/user_guide.md](docs/user_guide.md) for more detailed usage instructions.
 
 ---
 
 ## 🏗️ Architecture & Core Concepts
 
-Warden uses **Incus** (a modern fork of LXD) to provide VM-like isolation with the speed and efficiency of containers. Detailed architecture is documented in [warden_prd.md](warden_prd.md).
+Warden uses **Incus** (a modern fork of LXD) to provide VM-like isolation with the speed and efficiency of containers. Detailed architecture is documented in [docs/warden_prd.md](docs/warden_prd.md).
 
 ### Container Strategy
 - **Isolation:** Uses unprivileged system containers with `security.nesting=true` to support Docker-in-Incus.
@@ -50,7 +50,7 @@ Warden uses **Incus** (a modern fork of LXD) to provide VM-like isolation with t
 
 ## 🛠️ Command Reference
 
-For a full breakdown of every command and its effects, refer to the [user_guide.md](user_guide.md).
+For a full breakdown of every command and its effects, refer to the [docs/user_guide.md](docs/user_guide.md).
 
 | Command | Usage | Description |
 | :--- | :--- | :--- |
@@ -83,7 +83,7 @@ Guidelines for development, coding standards, and AI assistance can be found in 
 
 ## ⚠️ Troubleshooting & Gotchas
 
-A history of system-specific issues and fixes is maintained in [incus_on_this_machine.md](incus_on_this_machine.md).
+A history of system-specific issues and fixes is maintained in [docs/incus_on_this_machine.md](docs/incus_on_this_machine.md).
 
 ### Fedora/Firewalld Issues
 On Fedora, the default firewall may block Incus DHCP. Ensure `incusbr0` is in the `incus` zone:
@@ -106,4 +106,4 @@ If you see `'xterm-kitty': unknown terminal type`, run `./warden.sh fix-terminal
 - `validate_setup.sh`: Guided walkthrough for testing the sandbox.
 - `cloud-init.yaml`: Definition of the "Gold Image" (zsh, Neovim, Docker, etc.).
 - `migrate_v1_to_v2.sh`: Script for upgrading existing jails to new base images.
-- `incus_on_this_machine.md`: Historical logs of system-specific setup (archived).
+- `docs/incus_on_this_machine.md`: Historical logs of system-specific setup (archived).

@@ -77,12 +77,16 @@ This project follows shell scripting best practices for maintainability and reli
 ### File Structure
 
 ```
-the_warden/
+warden/
 ├── warden.sh              # Main jail manager script
-├── validate_setup.sh  # Validation script
-├── AGENTS.md          # This file
-├── the_warden_prd.md  # Product requirements
-└── .beads/            # Issue tracking
+├── validate_setup.sh      # Validation script
+├── AGENTS.md              # This file
+├── README.md              # Project overview (Consolidated)
+├── docs/
+│   ├── warden_prd.md      # Product requirements
+│   ├── user_guide.md      # User guide
+│   └── ...                # Other documentation
+└── .git/                  # Git repository
 ```
 
 ### Naming Conventions
