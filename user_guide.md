@@ -19,6 +19,11 @@ To perform the actual setup:
 ./setup_incus.sh
 ```
 
+**Note:** The base image provisioning can take 3-10 minutes. You can monitor the progress in a separate terminal by running:
+```bash
+incus exec base-temp -- tail -f /var/log/cloud-init-output.log
+```
+
 This script will:
 - Install `incus`, `jq`, `git`, and `zellij`.
 - Initialize the Incus daemon.
