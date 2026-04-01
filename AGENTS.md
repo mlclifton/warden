@@ -34,6 +34,8 @@ Currently, testing is manual due to the nature of container management. Automate
 ./warden.sh create test-project
 ./warden.sh info test-project
 ./warden.sh connect test-project  # Manual verification
+./migrate_v1_to_v2.sh             # Test migration to v2
+./warden.sh connect test-project  # Verify Neovim/LazyVim
 ./warden.sh destroy test-project
 
 # Validate setup with the provided script

@@ -17,6 +17,7 @@ shfmt -w *.sh
 ./warden.sh create test-sandbox
 ./warden.sh list
 ./warden.sh connect test-sandbox
+./migrate_v1_to_v2.sh
 ./warden.sh destroy test-sandbox
 
 # Guided validation (interactive)
@@ -27,7 +28,7 @@ shfmt -w *.sh
 
 ### Container Strategy
 - Uses **Incus** unprivileged system containers (not Docker), providing VM-like isolation with container speed.
-- New environments are cloned from a pre-built snapshot `base-dev-v1` (defined by `cloud-init.yaml`) for near-instant startup.
+- New environments are cloned from a pre-built snapshot `base-dev-v2` (defined by `cloud-init.yaml`) for near-instant startup.
 - Profile `dev-profile` is applied at init alongside the `default` profile.
 - `security.nesting=true` is enabled via the profile to support Docker-in-container.
 
@@ -41,11 +42,11 @@ shfmt -w *.sh
 - Inside the container, connects to a Zellij session: `zellij attach -c options || zellij -l default`.
 
 ### Base Image (`cloud-init.yaml`)
-Defines the `base-dev-v1` gold image: `dev` user (uid/gid 1000), zsh + oh-my-zsh, Zellij, Docker, Node, Python, openssh-server. After first provisioning, snapshot this container and use it as `BASE_IMAGE`.
+Defines the `base-dev-v2` gold image: `dev` user (uid/gid 1000), zsh + oh-my-zsh, Zellij, Neovim (LazyVim), Docker, Node, Python, openssh-server. After first provisioning, snapshot this container and use it as `BASE_IMAGE`.
 
 ### Key Variables (`warden.sh`)
 - `JAIL_ROOT="$HOME/jails"` — host-side project directories
-- `BASE_IMAGE="base-dev-v1"` — Incus image/snapshot to clone from
+- `BASE_IMAGE="base-dev-v2"` — Incus image/snapshot to clone from
 - `PROFILE="dev-profile"` — Incus profile with resource limits and nesting
 
 ## Dependencies

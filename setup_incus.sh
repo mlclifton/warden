@@ -18,7 +18,7 @@ log_step() { echo -e "\n${BLUE}STEP $1:${NC} $2"; }
 log_dry() { echo -e "${YELLOW}[DRY-RUN]${NC} $1"; }
 
 # Configuration
-BASE_IMAGE="base-dev-v1"
+BASE_IMAGE="base-dev-v2"
 PROFILE="dev-profile"
 CLOUD_INIT="cloud-init.yaml"
 DRY_RUN=false
@@ -175,8 +175,9 @@ if command -v incus &>/dev/null && incus info &>/dev/null 2>&1; then
         if [ -f "$CLOUD_INIT" ]; then
             # Using /cloud variant to ensure cloud-init is pre-installed in the container
             execute "Provision base image '$BASE_IMAGE' (this involves launching a temporary container and may take time)" \
-                    "incus launch images:ubuntu/24.04/cloud base-temp -c user.user-data=\"\$(cat $CLOUD_INIT)\" && \
-                     incus exec base-temp -- cloud-init status --wait && \
+                    "incus delete base-temp --force 2>/dev/null || true; \
+                     incus launch images:ubuntu/24.04/cloud base-temp -c user.user-data=\"\$(cat $CLOUD_INIT)\" && \
+                     incus exec base-temp -- cloud-init status --wait || true; \
                      incus stop base-temp && \
                      incus publish base-temp --alias $BASE_IMAGE && \
                      incus delete base-temp"

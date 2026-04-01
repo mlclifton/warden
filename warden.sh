@@ -5,7 +5,7 @@ set -e
 
 # Configuration
 JAIL_ROOT="$HOME/jails"
-BASE_IMAGE="base-dev-v1"
+BASE_IMAGE="base-dev-v2"
 PROFILE="dev-profile"
 
 # Colors
@@ -78,9 +78,12 @@ cmd_doctor() {
       else
         log_error "Base image '$BASE_IMAGE' not found"
         echo "         Provision a container with cloud-init.yaml, then snapshot it:"
-        echo "           incus launch ubuntu:24.04 base-dev -c user.user-data=\"\$(cat cloud-init.yaml)\""
-        echo "           incus snapshot base-dev v1"
-        echo "           incus copy base-dev/v1 $BASE_IMAGE"
+        echo "           incus launch images:ubuntu/24.04/cloud base-temp -c user.user-data=\"\$(cat cloud-init.yaml)\""
+        echo "           # Wait for cloud-init to finish..."
+        echo "           incus exec base-temp -- cloud-init status --wait"
+        echo "           incus stop base-temp"
+        echo "           incus publish base-temp --alias $BASE_IMAGE"
+        echo "           incus delete base-temp"
         all_ok=false
       fi
 

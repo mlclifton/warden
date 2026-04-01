@@ -63,3 +63,34 @@ This document summarizes findings and configurations specific to the Incus setup
   - New containers include `ncurses-term` and `kitty-terminfo` via `cloud-init.yaml`.
   - For existing containers, use: `./warden.sh fix-terminal <name>`.
   - The `connect` command now includes a fallback to `xterm-256color` if the host's `TERM` is not recognized by the container.
+
+## 8. Updating the Base Image & Migration
+
+When you need to add new global tools (like Neovim, Docker plugins, or language runtimes) to all future jails, follow this workflow:
+
+### Step 1: Modify `cloud-init.yaml`
+Add the required packages to the `packages` list or add installation scripts to the `runcmd` section.
+
+### Step 2: Bump the Version
+Update the `BASE_IMAGE` variable in both `warden.sh` and `setup_incus.sh` (e.g., from `base-dev-v2` to `base-dev-v3`). This ensures that new jails use the new image immediately.
+
+### Step 3: Build the New Image
+Run the setup script:
+```bash
+./setup_incus.sh
+```
+This script will detect that the new version (v3) is missing, launch a temporary container, apply the `cloud-init.yaml` changes, and publish it as the new gold image.
+
+### Step 4: Migrate Existing Jails
+To bring old containers up to the new specification, use the migration script:
+```bash
+./migrate_v1_to_v2.sh  # Or a newer version of this script
+```
+**What the migration script does:**
+1.  Stops the old jail.
+2.  Renames it to `<name>-v1-backup`.
+3.  Creates a fresh jail with the same name using the new base image.
+4.  Re-attaches the project source directory (`~/jails/<name>`) to the new container.
+5.  Starts the new container.
+
+Since Warden uses host-mounted directories for project code, no data is lost during this "delete and recreate" cycle.

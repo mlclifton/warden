@@ -32,6 +32,12 @@ packages:
   - python3-venv
   - nodejs
   - npm
+  - ripgrep
+  - fd-find
+  - unzip
+  - gettext
+  - shfmt
+  - shellcheck
   # Container Tools
   - docker.io
   - docker-compose
@@ -42,6 +48,12 @@ packages:
   - kitty-terminfo
 
 runcmd:
+  # Install Neovim (v0.11.0+)
+  - curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+  - tar xzf nvim-linux-x86_64.tar.gz -C /usr/local --strip-components=1
+  - rm nvim-linux-x86_64.tar.gz
+  - nvim --version | head -n 1
+
   # Install Zellij
   - curl -L https://github.com/zellij-org/zellij/releases/download/v0.40.1/zellij-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin
   - chmod +x /usr/local/bin/zellij
@@ -50,10 +62,22 @@ runcmd:
   - systemctl enable docker
   - systemctl start docker
   - usermod -aG docker dev
+  - ln -s /usr/bin/fdfind /usr/local/bin/fd
+  - npm install -g tree-sitter-cli
   
   # Oh My Zsh (for dev user)
   - sudo -u dev sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
   - sudo -u dev sed -i 's/plugins=(git)/plugins=(git docker python)/' /home/dev/.zshrc
+  - echo 'export EDITOR="nvim"' >> /home/dev/.zshrc
+  - echo 'export VISUAL="nvim"' >> /home/dev/.zshrc
+  - echo 'alias vi="nvim"' >> /home/dev/.zshrc
+  - echo 'alias vim="nvim"' >> /home/dev/.zshrc
+
+  # LazyVim (for dev user)
+  - sudo -u dev git clone https://github.com/LazyVim/starter /home/dev/.config/nvim
+  - rm -rf /home/dev/.config/nvim/.git
+  # Headless sync and keep nvim open for 90s to let Mason/Treesitter finish background installs
+  - sudo -u dev nvim --headless "+Lazy! sync" -c "lua vim.defer_fn(function() vim.cmd('qa') end, 90000)"
 
 
 

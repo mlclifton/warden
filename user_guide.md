@@ -28,7 +28,7 @@ This script will:
 - Install `incus`, `jq`, `git`, and `zellij`.
 - Initialize the Incus daemon.
 - Create the `dev-profile`.
-- Build the `base-dev-v1` image using Cloud-init.
+- Build the `base-dev-v2` image using Cloud-init.
 
 ### 2. Verify Installation
 You can verify your environment at any time using the `doctor` command:
@@ -63,7 +63,7 @@ Creates a new development environment.
 **What it does:**
 1. Creates a directory at `~/jails/<name>` on your host.
 2. (Optional) Clones the provided `git_url` into that directory.
-3. Initializes an Incus container named `<name>` using the `base-dev-v1` image.
+3. Initializes an Incus container named `<name>` using the `base-dev-v2` image.
 4. Mounts your host directory into the container at `/home/dev/project`.
 5. Starts the container.
 6. Prompts you to set a password for the `dev` user (optional).
@@ -140,12 +140,13 @@ Repairs terminal issues (like broken backspace or cursor keys) in an existing co
 ### Script Variables
 The following variables are defined at the top of `warden.sh` and can be modified if your setup differs:
 - **`JAIL_ROOT`**: Default is `~/jails`. This is where project directories are stored on the host.
-- **`BASE_IMAGE`**: Default is `base-dev-v1`. The Incus image used to create new containers.
+- **`BASE_IMAGE`**: Default is `base-dev-v2`. The Incus image used to create new containers.
 - **`PROFILE`**: Default is `dev-profile`. The Incus profile applied to new containers.
 
 ### Environment Details
 - **Default User**: `dev` (UID/GID 1000).
 - **Default Shell**: `zsh` with Oh My Zsh.
+- **Default Editor**: `neovim` with **LazyVim** pre-configured.
 - **Sudo Access**: The `dev` user has passwordless sudo access inside the container.
 - **SSH Access**:
   - The host's SSH agent is forwarded to the container (`ssh -A`).
@@ -197,7 +198,7 @@ The `connect` command uses `ssh -A`, which enables SSH agent forwarding. This me
 ## Configuration Details
 
 The script uses the following defaults:
-- **Base Image**: `base-dev-v1` (must be created beforehand).
+- **Base Image**: `base-dev-v2` (must be created beforehand).
 - **Profile**: `dev-profile` (must be created beforehand).
 - **Storage**: Containers are stored in the default Incus storage pool.
 - **Root Path**: All project directories are stored in `~/jails/`.
