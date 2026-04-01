@@ -295,7 +295,28 @@ cmd_destroy() {
 }
 
 cmd_list() {
-  incus list --columns n,s,4,t
+  local json
+  json=$(incus list --format json 2>/dev/null)
+
+  if [ "$(echo "$json" | jq 'length')" -eq 0 ]; then
+    log_info "No jails found."
+    return
+  fi
+
+  printf "%-28s  %-10s  %-16s  %-11s  %s\n" "NAME" "STATE" "IPV4" "TYPE" "PROJECT DIR"
+  printf "%-28s  %-10s  %-16s  %-11s  %s\n" \
+    "----------------------------" "----------" "----------------" "-----------" "--------------------"
+
+  echo "$json" | jq -r '.[] | [
+    .name,
+    .state.status,
+    ((.state.network.eth0.addresses // []) | map(select(.family=="inet")) | .[0].address // "-"),
+    .type
+  ] | @tsv' | while IFS=$'\t' read -r name state ip type; do
+    local dir="$JAIL_ROOT/$name"
+    [ -d "$dir" ] || dir="-"
+    printf "%-28s  %-10s  %-16s  %-11s  %s\n" "$name" "$state" "$ip" "$type" "$dir"
+  done
 }
 
 cmd_fix_terminal() {
