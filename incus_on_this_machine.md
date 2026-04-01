@@ -55,3 +55,11 @@ This document summarizes findings and configurations specific to the Incus setup
 ### Mirror URL Syntax
 - **Issue:** The `mirror://` scheme in `cloud-init.yaml` is sensitive. Using `http://mirror://` will cause DNS resolution failures for the literal hostname "mirror".
 - **Correct Syntax:** `uri: mirror://mirrors.ubuntu.com/mirrors.txt`
+
+### Terminal & Cursor Issues (Kitty, etc.)
+- **Issue:** Connecting via `warden.sh connect` may result in broken backspace, cursor keys, or "unknown terminal type" errors (e.g., `'xterm-kitty': unknown terminal type`).
+- **Cause:** The container lacks the terminfo definitions for the host terminal. Standard Ubuntu images often miss `ncurses-term` and specialized definitions like `kitty-terminfo`.
+- **Solution:** 
+  - New containers include `ncurses-term` and `kitty-terminfo` via `cloud-init.yaml`.
+  - For existing containers, use: `./warden.sh fix-terminal <name>`.
+  - The `connect` command now includes a fallback to `xterm-256color` if the host's `TERM` is not recognized by the container.

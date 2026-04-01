@@ -38,6 +38,8 @@ packages:
   # Networking
   - openssh-server
   - avahi-daemon
+  - ncurses-term
+  - kitty-terminfo
 
 runcmd:
   # Install Zellij

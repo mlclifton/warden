@@ -27,6 +27,7 @@ usage() {
   echo "  destroy <name>            Destroy an environment"
   echo "  list                      List all environments"
   echo "  doctor                    Check installation and report any issues"
+  echo "  fix-terminal <name>       Fix terminal/backspace issues in an existing container"
   echo ""
 }
 
@@ -243,8 +244,21 @@ cmd_connect() {
   fi
 
   log_info "Connecting to $name ($ip)..."
+  
+  # Ensure we have a sane terminal environment
+  local term_to_use="${TERM:-xterm-256color}"
+
   # Using -o StrictHostKeyChecking=no to avoid known_hosts issues with ephemeral containers
-  ssh -A -o StrictHostKeyChecking=no "dev@$ip" -t "zellij attach -c options || zellij -l default"
+  # We first check if the remote system knows about our TERM. If not, fallback to xterm-256color.
+  # Then run 'stty sane' and launch zellij.
+  ssh -A -o StrictHostKeyChecking=no "dev@$ip" -t "
+    if ! infocmp $term_to_use >/dev/null 2>&1; then
+      export TERM=xterm-256color
+    else
+      export TERM=$term_to_use
+    fi
+    stty sane; zellij attach -c options || zellij -l default
+  "
 }
 
 cmd_destroy() {
@@ -276,6 +290,25 @@ cmd_list() {
   incus list --columns n,s,4,t
 }
 
+cmd_fix_terminal() {
+  local name=$1
+  if [ -z "$name" ]; then
+    log_error "Project name required."
+    exit 1
+  fi
+  
+  if ! incus info "$name" &>/dev/null; then
+    log_error "Instance '$name' not found."
+    exit 1
+  fi
+
+  log_info "Updating terminal definitions in '$name'..."
+  # Use non-interactive apt and skip if already installed
+  incus exec "$name" -- bash -c "export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y ncurses-term kitty-terminfo"
+  
+  log_success "Terminal definitions updated. Try connecting again with './warden.sh connect $name'."
+}
+
 # Main
 if [ $# -lt 1 ]; then
   usage
@@ -300,6 +333,9 @@ list)
   ;;
 doctor)
   cmd_doctor "$@"
+  ;;
+fix-terminal)
+  cmd_fix_terminal "$@"
   ;;
 *)
   log_error "Unknown command: $COMMAND"

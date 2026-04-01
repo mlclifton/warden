@@ -117,6 +117,22 @@ Deletes a development environment.
 ./warden.sh destroy my-webapp
 ```
 
+### 5. `doctor`
+Checks your host system for dependencies and reports any configuration issues.
+
+**Usage:**
+```bash
+./warden.sh doctor
+```
+
+### 6. `fix-terminal`
+Repairs terminal issues (like broken backspace or cursor keys) in an existing container by installing missing terminal definitions (`ncurses-term`).
+
+**Usage:**
+```bash
+./warden.sh fix-terminal <name>
+```
+
 ---
 
 ## Configuration & Environment
