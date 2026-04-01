@@ -103,6 +103,17 @@ cmd_doctor() {
         echo "         Create it: incus network create incusbr0"
         all_ok=false
       fi
+
+      # --- firewalld (Fedora specific) ---
+      if [ -f /etc/fedora-release ] && command -v firewall-cmd &>/dev/null; then
+        if firewall-cmd --get-active-zones | grep -q "^incus"; then
+          log_success "Firewalld 'incus' zone is active"
+        else
+          log_error "Firewalld 'incus' zone NOT active (networking may be blocked)"
+          echo "         Run: ./setup_incus.sh to configure firewall"
+          all_ok=false
+        fi
+      fi
     fi
   fi
 

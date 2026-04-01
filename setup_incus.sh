@@ -131,6 +131,22 @@ if command -v incus &>/dev/null && incus info &>/dev/null 2>&1; then
         log_warn "Incus does not appear to be initialized."
         execute "Initialize Incus with default settings" "sudo incus admin init --auto"
     fi
+
+    # Firewall setup (Fedora specific)
+    if [ "$OS" = "fedora" ] && command -v firewall-cmd &>/dev/null; then
+        if ! firewall-cmd --get-active-zones | grep -q "^incus"; then
+            log_warn "Firewalld is active but no 'incus' zone found. Networking might be blocked."
+            execute "Configure firewalld for Incus" "sudo firewall-cmd --permanent --new-zone=incus && \
+                     sudo firewall-cmd --permanent --zone=incus --add-service=dhcp && \
+                     sudo firewall-cmd --permanent --zone=incus --add-service=dns && \
+                     sudo firewall-cmd --permanent --zone=incus --add-service=dhcpv6 && \
+                     sudo firewall-cmd --permanent --zone=incus --set-target=ACCEPT && \
+                     sudo firewall-cmd --permanent --zone=incus --add-interface=incusbr0 && \
+                     sudo firewall-cmd --reload"
+        else
+            log_success "Firewalld 'incus' zone is active."
+        fi
+    fi
 else
     log_dry "Incus not reachable; skipping initialization check."
 fi
