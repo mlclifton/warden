@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup_incus.sh - Guide the user through setting up Incus for Warden
+# setup_incus.sh - Guided Setup for Warden Development Environments
 
 set -e
 
@@ -14,6 +14,7 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "\n${BLUE}STEP $1:${NC} $2"; }
 log_dry() { echo -e "${YELLOW}[DRY-RUN]${NC} $1"; }
 
 # Configuration
@@ -33,25 +34,27 @@ for arg in "$@"; do
 done
 
 echo "================================================================="
-echo "  Warden: Incus Environment Setup"
+echo "  Warden Setup Wizard"
 if [ "$DRY_RUN" = true ]; then
-    echo "  *** DRY-RUN MODE: Reporting required actions only ***"
+    echo "  (Dry-run mode: Reporting necessary changes only)"
 fi
 echo "================================================================="
+echo "This wizard will ensure your environment meets the requirements"
+echo "for Warden jails. It will only modify settings where needed."
 
 # Helper to execute or dry-run
 execute() {
     local msg=$1
     local cmd=$2
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Action required: $msg"
+        log_dry "Would perform: $msg"
     else
-        log_info "$msg"
+        log_info "$msg..."
         eval "$cmd"
     fi
 }
 
-# 1. Detect OS
+# 1. Host System Detection
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$ID
@@ -59,107 +62,106 @@ else
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 fi
 
-# 2. Check Dependencies
-echo "--- Checking Dependencies ---"
-check_tool() {
-    local tool=$1
-    if command -v "$tool" &>/dev/null; then
-        log_success "Tool '$tool' is installed."
-        return 0
-    else
-        log_warn "Tool '$tool' is missing."
-        return 1
+# 2. System Dependencies
+log_step 1 "Checking System Dependencies"
+MISSING_PKGS=""
+for tool in incus jq git zellij; do
+    if ! command -v "$tool" &>/dev/null; then
+        MISSING_PKGS="$MISSING_PKGS $tool"
     fi
-}
-
-MISSING_TOOLS=false
-for t in incus jq git zellij; do
-    if ! check_tool "$t"; then MISSING_TOOLS=true; fi
 done
 
-if [ "$MISSING_TOOLS" = true ]; then
+if [ -n "$MISSING_PKGS" ]; then
+    log_warn "The following tools are missing:$MISSING_PKGS"
     case "$OS" in
         ubuntu|debian)
-            execute "Install missing tools via apt (incus, jq, git, snapd, zellij)" "sudo apt update && sudo apt install -y incus jq git snapd && sudo snap install zellij --classic"
+            execute "Install missing tools via apt and snap" "sudo apt update && sudo apt install -y incus jq git snapd && sudo snap install zellij --classic"
             ;;
         fedora)
-            execute "Install missing tools via dnf (incus, jq, git, zellij)" "sudo dnf install -y incus jq git zellij"
+            execute "Install missing tools via dnf" "sudo dnf install -y incus jq git zellij"
             ;;
         *)
-            log_error "Automatic installation not supported for $OS. Please install missing tools manually."
+            log_error "Automatic installation not supported for $OS. Please install:$MISSING_PKGS"
             [ "$DRY_RUN" = false ] && exit 1
             ;;
     esac
+else
+    log_success "All system dependencies are present."
 fi
 
-# 3. Check Daemon & Permissions
-echo ""
-echo "--- Checking Incus Daemon ---"
-DAEMON_REACHABLE=false
+# 3. Incus Service & Access
+log_step 2 "Checking Incus Service & Access"
 if command -v incus &>/dev/null; then
     if incus info &>/dev/null; then
-        log_success "Incus daemon is reachable."
-        DAEMON_REACHABLE=true
+        log_success "Incus daemon is reachable and you have permission."
     else
-        log_warn "Incus daemon is NOT reachable."
         if groups | grep -q "incus-admin"; then
             execute "Start incus service" "sudo systemctl start incus"
         else
+            log_warn "Current user '$USER' is not in the 'incus-admin' group."
             execute "Add $USER to 'incus-admin' group (Requires logout/login)" "sudo usermod -aG incus-admin $USER"
+            if [ "$DRY_RUN" = false ]; then
+                log_info "Please log out and back in to apply group changes, then re-run this script."
+                exit 0
+            fi
         fi
     fi
 else
-    log_dry "Cannot check daemon until 'incus' is installed."
+    log_dry "Incus not installed; skipping service checks."
 fi
 
-# 4. Check Initialization (Network)
-echo ""
-echo "--- Checking Initialization ---"
-if [ "$DAEMON_REACHABLE" = true ]; then
+# 4. Incus Initialization
+log_step 3 "Checking Incus Initialization"
+if command -v incus &>/dev/null && incus info &>/dev/null 2>&1; then
     if incus network list --format json | jq -e '.[] | select(.name == "incusbr0")' &>/dev/null; then
-        log_success "Incus is initialized (incusbr0 found)."
+        log_success "Incus is already initialized with 'incusbr0'."
     else
-        execute "Initialize Incus (incus admin init --auto)" "sudo incus admin init --auto"
+        log_warn "Incus does not appear to be initialized."
+        execute "Initialize Incus with default settings" "sudo incus admin init --auto"
     fi
 else
-    log_dry "Check skipped: Daemon not reachable."
+    log_dry "Incus not reachable; skipping initialization check."
 fi
 
-# 5. Check Profile
-echo ""
-echo "--- Checking Profile ---"
-if [ "$DAEMON_REACHABLE" = true ]; then
+# 5. Warden-Specific Components
+log_step 4 "Provisioning Warden Components"
+
+# Profile
+if command -v incus &>/dev/null && incus info &>/dev/null 2>&1; then
     if incus profile list --format json | jq -e --arg p "$PROFILE" '.[] | select(.name == $p)' &>/dev/null; then
-        log_success "Profile '$PROFILE' exists."
+        log_success "Warden profile '$PROFILE' already exists."
     else
-        execute "Create and configure profile '$PROFILE'" "incus profile create $PROFILE && incus profile set $PROFILE security.nesting=true && incus profile set $PROFILE limits.cpu=4 && incus profile set $PROFILE limits.memory=8GB"
+        execute "Create and configure '$PROFILE' (nesting=true, limits.cpu=4, limits.memory=8GB)" \
+                "incus profile create $PROFILE && \
+                 incus profile set $PROFILE security.nesting=true && \
+                 incus profile set $PROFILE limits.cpu=4 && \
+                 incus profile set $PROFILE limits.memory=8GB"
     fi
-else
-    log_dry "Check skipped: Daemon not reachable."
 fi
 
-# 6. Check Base Image
-echo ""
-echo "--- Checking Base Image ---"
-if [ "$DAEMON_REACHABLE" = true ]; then
+# Base Image
+if command -v incus &>/dev/null && incus info &>/dev/null 2>&1; then
     if incus image list --format json | jq -e --arg img "$BASE_IMAGE" '.[] | select(.aliases[].name == $img)' &>/dev/null; then
-        log_success "Base image '$BASE_IMAGE' exists."
+        log_success "Base image '$BASE_IMAGE' already exists."
     else
         if [ -f "$CLOUD_INIT" ]; then
-            execute "Provision base image '$BASE_IMAGE' using $CLOUD_INIT" "echo 'Provisioning... (this would run incus launch, wait for cloud-init, and publish)'"
+            execute "Provision base image '$BASE_IMAGE' (this involves launching a temporary container and may take time)" \
+                    "incus launch ubuntu:24.04 base-temp -c user.user-data=\"\$(cat $CLOUD_INIT)\" && \
+                     incus exec base-temp -- cloud-init status --wait && \
+                     incus stop base-temp && \
+                     incus publish base-temp --alias $BASE_IMAGE && \
+                     incus delete base-temp"
         else
-            log_error "Cloud-init file '$CLOUD_INIT' missing. Cannot provision image."
+            log_error "Required file '$CLOUD_INIT' missing. Cannot provision base image."
         fi
     fi
-else
-    log_dry "Check skipped: Daemon not reachable."
 fi
 
 echo ""
-echo "-----------------------------------------------------------------"
+echo "================================================================="
 if [ "$DRY_RUN" = true ]; then
-    log_info "Dry-run complete."
+    log_info "Setup check complete. Run without --dry-run to apply necessary changes."
 else
-    log_success "Setup script finished."
-    ./warden.sh doctor
+    log_success "Warden setup wizard finished!"
+    log_info "You can run './warden.sh doctor' for a full diagnostic report."
 fi
