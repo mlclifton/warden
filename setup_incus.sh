@@ -145,8 +145,9 @@ if command -v incus &>/dev/null && incus info &>/dev/null 2>&1; then
         log_success "Base image '$BASE_IMAGE' already exists."
     else
         if [ -f "$CLOUD_INIT" ]; then
+            # Using images:ubuntu/24.04 as it is the most portable source for the community images server
             execute "Provision base image '$BASE_IMAGE' (this involves launching a temporary container and may take time)" \
-                    "incus launch ubuntu:24.04 base-temp -c user.user-data=\"\$(cat $CLOUD_INIT)\" && \
+                    "incus launch images:ubuntu/24.04 base-temp -c user.user-data=\"\$(cat $CLOUD_INIT)\" && \
                      incus exec base-temp -- cloud-init status --wait && \
                      incus stop base-temp && \
                      incus publish base-temp --alias $BASE_IMAGE && \
