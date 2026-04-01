@@ -122,6 +122,8 @@ cmd_doctor() {
     log_success "All checks passed. Warden is ready to use."
   else
     log_error "Some checks failed. Resolve the issues above before using Warden."
+    echo ""
+    log_info "Tip: You can run './setup_incus.sh' to automatically fix most configuration issues."
     return 1
   fi
 }

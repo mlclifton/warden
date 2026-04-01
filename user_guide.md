@@ -2,6 +2,36 @@
 
 The `warden.sh` script is a utility to manage isolated development environments (jails) using Incus containers. It allows you to create, connect to, and destroy project-specific containers while keeping your source code synchronized between the host and the container.
 
+## Getting Started
+
+Before using Warden, you need to set up Incus and the base development image on your system.
+
+### 1. Initial Setup
+Run the setup script to install dependencies, configure Incus, and provision the base image. You can use the `--dry-run` flag to see what will happen before any changes are made:
+
+```bash
+./setup_incus.sh --dry-run
+```
+
+To perform the actual setup:
+
+```bash
+./setup_incus.sh
+```
+
+This script will:
+- Install `incus`, `jq`, `git`, and `zellij`.
+- Initialize the Incus daemon.
+- Create the `dev-profile`.
+- Build the `base-dev-v1` image using Cloud-init.
+
+### 2. Verify Installation
+You can verify your environment at any time using the `doctor` command:
+
+```bash
+./warden.sh doctor
+```
+
 ## Overview
 
 Each "jail" is a lightweight Linux container based on a pre-configured image. The primary benefit is that development dependencies (compilers, runtimes, databases) stay inside the container, keeping your host system clean.
