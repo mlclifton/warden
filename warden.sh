@@ -26,7 +26,104 @@ usage() {
   echo "  connect <name>            Connect to an existing environment"
   echo "  destroy <name>            Destroy an environment"
   echo "  list                      List all environments"
+  echo "  doctor                    Check installation and report any issues"
   echo ""
+}
+
+cmd_doctor() {
+  local all_ok=true
+
+  echo "Checking Warden dependencies..."
+  echo ""
+
+  # --- CLI tools ---
+  check_tool() {
+    local cmd=$1 install_hint=$3
+    if command -v "$cmd" &>/dev/null; then
+      log_success "$cmd found ($(command -v "$cmd"))"
+    else
+      log_error "$cmd not found"
+      echo "         Install: $install_hint"
+      all_ok=false
+    fi
+  }
+
+  check_tool incus  incus   "https://linuxcontainers.org/incus/docs/main/installing/"
+  check_tool jq     jq      "sudo dnf install jq  OR  sudo apt install jq"
+  check_tool git    git     "sudo dnf install git  OR  sudo apt install git"
+  check_tool ssh    openssh "sudo dnf install openssh-clients  OR  sudo apt install openssh-client"
+  check_tool zellij zellij  "cargo install zellij  OR  see https://zellij.dev/documentation/installation"
+
+  echo ""
+  echo "Checking Incus configuration..."
+  echo ""
+
+  # --- incus daemon reachable ---
+  if command -v incus &>/dev/null; then
+    if incus info &>/dev/null 2>&1; then
+      log_success "incus daemon reachable"
+    else
+      log_error "incus daemon not reachable (permission issue or not running)"
+      echo "         Try: sudo systemctl start incus"
+      echo "              sudo usermod -aG incus-admin \$USER  (then log out/in)"
+      all_ok=false
+    fi
+
+    # --- base image ---
+    if incus info &>/dev/null 2>&1; then
+      if incus image list --format json 2>/dev/null | jq -e --arg img "$BASE_IMAGE" \
+          '.[] | select(.aliases[].name == $img)' &>/dev/null; then
+        log_success "Base image '$BASE_IMAGE' found"
+      else
+        log_error "Base image '$BASE_IMAGE' not found"
+        echo "         Provision a container with cloud-init.yaml, then snapshot it:"
+        echo "           incus launch ubuntu:24.04 base-dev -c user.user-data=\"\$(cat cloud-init.yaml)\""
+        echo "           incus snapshot base-dev v1"
+        echo "           incus copy base-dev/v1 $BASE_IMAGE"
+        all_ok=false
+      fi
+
+      # --- dev-profile ---
+      if incus profile list --format json 2>/dev/null | jq -e --arg p "$PROFILE" \
+          '.[] | select(.name == $p)' &>/dev/null; then
+        log_success "Profile '$PROFILE' found"
+      else
+        log_error "Profile '$PROFILE' not found"
+        echo "         Create it: incus profile create $PROFILE"
+        echo "         Then configure resource limits and security.nesting=true:"
+        echo "           incus profile set $PROFILE security.nesting=true"
+        all_ok=false
+      fi
+
+      # --- incusbr0 network ---
+      if incus network list --format json 2>/dev/null | jq -e '.[] | select(.name == "incusbr0")' &>/dev/null; then
+        log_success "Network 'incusbr0' found"
+      else
+        log_error "Network 'incusbr0' not found"
+        echo "         Create it: incus network create incusbr0"
+        all_ok=false
+      fi
+    fi
+  fi
+
+  echo ""
+  echo "Checking host directories..."
+  echo ""
+
+  # --- jail root ---
+  if [ -d "$JAIL_ROOT" ]; then
+    log_success "Jail root '$JAIL_ROOT' exists"
+  else
+    log_info "Jail root '$JAIL_ROOT' does not exist (will be created on first 'create')"
+  fi
+
+  echo ""
+  if $all_ok; then
+    log_success "All checks passed. Warden is ready to use."
+  else
+    log_error "Some checks failed. Resolve the issues above before using Warden."
+    return 1
+  fi
 }
 
 cmd_create() {
@@ -57,7 +154,7 @@ cmd_create() {
 
   # 2. Git Clone (if requested)
   if [ -n "$git_url" ]; then
-    if [ "$(ls -A $project_dir)" ]; then
+    if [ "$(ls -A "$project_dir")" ]; then
       log_info "Directory not empty, skipping git clone."
     else
       log_info "Cloning $git_url..."
@@ -82,7 +179,7 @@ cmd_create() {
   # 7. Set User Password
   if [ -t 0 ]; then
     echo -n "Set password for 'dev' user (press Enter to skip): "
-    read -s PASSWORD
+    read -rs PASSWORD
     echo
     if [ -n "$PASSWORD" ]; then
       log_info "Setting password..."
@@ -97,7 +194,7 @@ cmd_create() {
   log_info "Waiting for networking..."
   # We use a simple check for cloud-init status as a proxy for 'booted' since cloud-init runs on boot
   # Or just wait for an IP.
-  for i in {1..30}; do
+  for _ in {1..30}; do
     if incus list "$name" --format json | jq -e '.[0].state.network.eth0.addresses | length > 0' >/dev/null; then
       break
     fi
@@ -124,7 +221,8 @@ cmd_connect() {
   fi
 
   # Get IP
-  local ip=$(incus list "$name" --format json | jq -r '.[0].state.network.eth0.addresses[] | select(.family=="inet") | .address' | head -n 1)
+  local ip
+  ip=$(incus list "$name" --format json | jq -r '.[0].state.network.eth0.addresses[] | select(.family=="inet") | .address' | head -n 1)
 
   if [ -z "$ip" ] || [ "$ip" == "null" ]; then
     log_error "Could not determine IP address. Is networking active?"
@@ -153,7 +251,7 @@ cmd_destroy() {
     read -p "Delete project directory? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-      rm -rf "$JAIL_ROOT/$name"
+      rm -rf "${JAIL_ROOT:?}/$name"
       log_success "Directory deleted."
     fi
   else
@@ -186,6 +284,9 @@ destroy)
   ;;
 list)
   cmd_list "$@"
+  ;;
+doctor)
+  cmd_doctor "$@"
   ;;
 *)
   log_error "Unknown command: $COMMAND"
