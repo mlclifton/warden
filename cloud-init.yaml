@@ -1,0 +1,52 @@
+#cloud-config
+users:
+  - name: dev
+    gecos: Developer
+    uid: 1000
+    gid: 1000
+    shell: /bin/zsh
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGjmbYaTlhI8lVjHEvqXrqOSup/81WuhZctOBPkc7oVP mike.l.clifton@gmail.com
+
+groups:
+  - docker
+
+packages:
+  # Core
+  - git
+  - curl
+  - wget
+  - vim
+  - zsh
+  - jq
+  # Dev Tools
+  - build-essential
+  - python3
+  - python3-pip
+  - python3-venv
+  - nodejs
+  - npm
+  # Container Tools
+  - docker.io
+  - docker-compose
+  # Networking
+  - openssh-server
+  - avahi-daemon
+
+runcmd:
+  # Install Zellij
+  - curl -L https://github.com/zellij-org/zellij/releases/download/v0.40.1/zellij-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin
+  - chmod +x /usr/local/bin/zellij
+  
+  # System Configuration
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker dev
+  
+  # Oh My Zsh (for dev user)
+  - sudo -u dev sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+  - sudo -u dev sed -i 's/plugins=(git)/plugins=(git docker python)/' /home/dev/.zshrc
+
+
+
