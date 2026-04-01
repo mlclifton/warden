@@ -1,4 +1,9 @@
 #cloud-config
+apt:
+  primary:
+    - arches: [default]
+      uri: http://mirror://mirrors.ubuntu.com/mirrors.txt
+
 users:
   - name: dev
     gecos: Developer
