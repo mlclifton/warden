@@ -9,7 +9,7 @@ bash tests/test_warden.sh
 ```
 
 This takes a few seconds and requires only `bash` and `jq` — no live Incus
-instance needed. A clean pass (91/91 at the time of writing) gives high
+instance needed. A clean pass (96/96 at the time of writing) gives high
 confidence in the argument parsing, error handling, jq data transformations, and
 the key Incus interaction sequences (stop/publish/restart ordering, publish
 failure recovery, config recording).
@@ -120,15 +120,12 @@ Inline variables hold realistic Incus JSON for the image list and container list
 | 2. jq expressions | Data transforms invoked directly on fixture JSON | No |
 | 3. `cmd_images` | Table output formatting, filtering | Yes |
 | 4. `cmd_image_info` | Metadata display, jail list, "(none)" case | Yes |
-| 5. `cmd_delete_image` | Non-interactive skip, WARN logic, no delete called | Yes |
+| 5. `cmd_delete_image` | Non-interactive skip, `--yes` deletion, WARN logic | Yes |
 | 6. `cmd_save_image` | All flow variants: stopped/running/fail | Yes |
 | 7. `cmd_create --image` | Flag parsing, image validation, init alias, config key | Yes |
 
 ### Known gaps (covered only by integration_test.sh)
 
-- **Interactive `delete-image`**: `[ -t 0 ]` is always false in automated tests,
-  so the deletion code path is never reached. `integration_test.sh` uses `expect`
-  to drive it if available.
 - **Real Incus JSON schema**: The jq fixture JSON was written by hand from the
   FRD spec. The jq tests confirm the expressions work against the fixtures, but
   do not confirm the fixtures match the actual `incus` output format.
@@ -149,9 +146,8 @@ The script:
 3. Registers a `trap cleanup EXIT` that destroys all test resources whether the
    tests pass or fail.
 4. Runs the full lifecycle: `create` → `save-image` → `images` → `image-info`
-   → `create --image` → `delete-image`.
-5. For the interactive `delete-image` prompt, uses `expect` if available;
-   otherwise skips those two tests and removes the image directly.
+   → `create --image` → `delete-image --yes`.
+5. No external tools beyond `bash`, `jq`, and `incus` are required.
 
 ---
 
@@ -217,8 +213,9 @@ Add assertions to `tests/integration_test.sh` in the relevant lifecycle section
 | Gap | Reason | Mitigation |
 |---|---|---|
 | `cmd_connect` | Opens an interactive SSH session | Manual test only |
-| `cmd_destroy` directory prompt | Same `[ -t 0 ]` issue as `delete-image` | Manual test; integration cleanup covers the non-interactive path |
+| `cmd_destroy` directory prompt | `[ -t 0 ]` is false in tests; prompt skipped | Manual test; integration cleanup covers the non-interactive path |
 | Password prompt in `cmd_create` | `[ -t 0 ]` is false in tests; prompt skipped | Manual test only |
+| `delete-image` TTY prompt (no `--yes`) | `[ -t 0 ]` is false in tests | Covered by `integration_test.sh` IT-27/28; `--yes` path covers the deletion code itself |
 | Network wait loop timeout (30s) | Mock returns IP immediately; timeout path not exercised | Acceptable — the loop logic is trivial |
 | `cmd_doctor` | Inspects real system state | Run `./warden.sh doctor` manually |
 | `cmd_fix_terminal` | Runs apt inside a container | Manual test only |

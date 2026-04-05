@@ -51,7 +51,7 @@ flag names like `--image`.
 
 ---
 
-## `delete-image` interactive prompt cannot be driven by piped stdin
+## `[ -t 0 ]` guards make deletion paths untestable without a TTY — use `--yes` instead
 
 **Date:** 2026-04-05  
 **Context:** Designing automated tests for `cmd_delete_image`.
@@ -59,8 +59,23 @@ flag names like `--image`.
 The `[ -t 0 ]` check in `cmd_delete_image` tests whether stdin is a terminal.
 When running as a subprocess (test harness, CI, `echo y | ./warden.sh ...`),
 `[ -t 0 ]` is false even if you pipe `y` to stdin. The function takes the
-non-interactive branch and returns without deleting anything.
+non-interactive branch and returns without deleting anything — which means the
+actual `incus image delete` call is never reached by any automated test.
 
-The actual delete path requires a real TTY. In automated tests, this is handled
-by `expect` (see `integration_test.sh IT-25`). The mock test suite only covers
-the non-interactive path (T52–T54).
+The integration test initially worked around this with `expect` to drive a real
+TTY, but `expect` is not universally installed and adds an external dependency
+for a single test path.
+
+**Fix:** Add a `--yes` flag that bypasses the prompt without changing the safe
+default behaviour:
+- Without `--yes`: unchanged (prompt when TTY, skip-with-message when not)
+- With `--yes`: skip the prompt and proceed directly to deletion
+
+The deletion code path is now reachable in the mock suite (T92–T96) and the
+integration suite (IT-25–IT-26) with no `expect` dependency.
+
+**Lesson:** For any command that has a `[ -t 0 ]` confirmation guard and is
+also meant to be scriptable, add `--yes`/`-y` from the start. The guard is
+correct for interactive safety; `--yes` is the intended escape hatch for scripts
+and tests. Relying on `expect` to test TTY-gated paths is fragile — it moves an
+external tool requirement into the test suite unnecessarily.

@@ -182,38 +182,19 @@ else fail "IT-22 user.warden.base_image: expected '$IMAGE_NAME', got '$recorded'
 
 # image-info should now show jail-b
 assert_contains "IT-23 image-info shows dependent jail"       "$JAIL_B"    "$WARDEN" image-info "$IMAGE_NAME"
-assert_not_contains "IT-24 image-info excludes unrelated jail" "$JAIL_A"   "$WARDEN" image-info "$IMAGE_NAME"
+assert_not_contains "IT-24 image-info excludes unrelated jail" "$JAIL_A   ("   "$WARDEN" image-info "$IMAGE_NAME"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# IT-6: delete-image (interactive via expect, or skipped)
+# IT-6: delete-image --yes
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-section "IT-6: delete-image"
+section "IT-6: delete-image --yes"
 
-if command -v expect &>/dev/null; then
-  # Use expect to drive the interactive prompt
-  result=0
-  expect -c "
-    spawn $WARDEN delete-image $IMAGE_NAME
-    expect \"Delete image\" { send \"y\r\" }
-    expect eof
-  " >/dev/null 2>&1 || result=$?
+assert_exit "IT-25 delete-image --yes succeeds" 0 "$WARDEN" delete-image --yes "$IMAGE_NAME"
 
-  if [ "$result" -eq 0 ]; then
-    ok "IT-25 delete-image: expect drove interactive deletion"
-    # Verify alias is gone
-    alias_count=$(incus image list --format json | jq --arg a "warden/$IMAGE_NAME" \
-      '[.[] | select(any(.aliases[]; .name == $a))] | length')
-    if [ "$alias_count" -eq 0 ]; then ok "IT-26 alias removed from Incus after delete"
-    else fail "IT-26 alias still present after delete"; fi
-  else
-    fail "IT-25 delete-image via expect failed"
-  fi
-else
-  skip "IT-25 delete-image interactive test skipped (install 'expect' to enable)"
-  skip "IT-26 alias removal test skipped"
-  # Manually delete the image so cleanup doesn't leave residue
-  incus image delete "warden/$IMAGE_NAME" 2>/dev/null || true
-fi
+alias_count=$(incus image list --format json | jq --arg a "warden/$IMAGE_NAME" \
+  '[.[] | select(any(.aliases[]; .name == $a))] | length')
+if [ "$alias_count" -eq 0 ]; then ok "IT-26 alias removed from Incus after delete"
+else fail "IT-26 alias still present after delete"; fi
 
 # Verify warning was shown (rerun against the now-gone image, should error)
 assert_exit     "IT-27 delete-image: gone image → exit 1"    1  "$WARDEN" delete-image "$IMAGE_NAME"

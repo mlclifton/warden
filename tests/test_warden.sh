@@ -444,8 +444,9 @@ assert_not_contains "T49 image-info: non-matching jail excluded" "other-jail"   
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SECTION 5: cmd_delete_image (with mock incus)
-# Note: [ -t 0 ] is false in all automated tests, so deletion is always skipped.
-#       The interactive delete path is covered in integration_test.sh.
+# Note: [ -t 0 ] is false in all automated tests, so the TTY prompt is never
+#       reached. The non-interactive path (no --yes) and the --yes path are both
+#       tested here. The interactive TTY prompt is covered in integration_test.sh.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 section "5. cmd_delete_image"
 
@@ -470,6 +471,23 @@ assert_contains "T56 delete-image: dependent jail → jail name"  "my-jail"  "$W
 
 export MOCK_CONTAINER_LIST="$CONTAINER_LIST_EMPTY"
 assert_not_contains "T57 delete-image: no jails → no WARN" "[WARN]" "$WARDEN" delete-image python-ds
+
+# --- --yes flag: deletion proceeds without TTY ---
+export MOCK_IMAGE_LIST="$IMAGE_LIST_ONE_WARDEN"
+export MOCK_CONTAINER_LIST="$CONTAINER_LIST_EMPTY"
+
+reset_log
+"$WARDEN" delete-image --yes python-ds >/dev/null 2>&1 || true
+assert_called     "T92 delete-image --yes → incus image delete called"    "^image delete warden/python-ds"
+
+assert_exit       "T93 delete-image --yes: known image → exit 0"          0  "$WARDEN" delete-image --yes python-ds
+assert_not_contains "T94 delete-image --yes: no skip message"  "Non-interactive mode"  "$WARDEN" delete-image --yes python-ds
+
+export MOCK_CONTAINER_LIST="$CONTAINER_LIST_WITH_JAIL"
+assert_contains   "T95 delete-image --yes: dependent jails → WARN still shown"  "[WARN]"   "$WARDEN" delete-image --yes python-ds
+
+export MOCK_IMAGE_LIST="$IMAGE_LIST_EMPTY"
+assert_exit       "T96 delete-image --yes: unknown image → exit 1"        1  "$WARDEN" delete-image --yes no-such-image
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SECTION 6: cmd_save_image (with mock incus)

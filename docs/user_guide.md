@@ -203,15 +203,17 @@ Deletes a warden-managed image.
 
 **Usage:**
 ```bash
-./warden.sh delete-image <image-name>
+./warden.sh delete-image <image-name> [--yes]
 ```
 
 **What it does:**
 1. Warns (but does not block) if existing jails were created from this image — those jails remain functional.
-2. Prompts for confirmation before deleting.
+2. Prompts for confirmation before deleting (unless `--yes` is passed).
 3. Removes the image from Incus.
 
-Skips the confirmation prompt and logs a message in non-interactive mode.
+Pass `--yes` (or `-y`) to skip the confirmation prompt — useful in scripts. In
+non-interactive mode without `--yes`, the command logs a message and exits
+without deleting.
 
 **Example:**
 ```bash
@@ -219,6 +221,10 @@ Skips the confirmation prompt and logs a message in non-interactive mode.
 # [WARN] 2 jail(s) were created from 'python-ds' (ds-experiment-1, ds-experiment-2).
 # [WARN] Deleting this image will not affect those jails.
 # Delete image 'python-ds'? [y/N] y
+# [SUCCESS] Image 'python-ds' deleted.
+
+# Non-interactive / scripted:
+./warden.sh delete-image python-ds --yes
 # [SUCCESS] Image 'python-ds' deleted.
 ```
 

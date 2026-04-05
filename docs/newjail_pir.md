@@ -213,3 +213,33 @@ of any future FRD for features that touch external tools.
 **Continue recording unexpected findings in `docs/this_i_learned.md`** as
 implementation progresses. It keeps institutional knowledge close to the code
 and provides the raw material for future PIRs.
+
+---
+
+## Addendum: `delete-image --yes` flag (2026-04-05)
+
+**What changed:** `delete-image` gained a `--yes` / `-y` flag that bypasses the
+interactive confirmation prompt without altering the safe default behaviour.
+
+**Why it was needed:** Post-implementation integration testing revealed that
+IT-25 and IT-26 — which exercise the actual `incus image delete` code path —
+were being skipped whenever `expect` was not installed. The original design used
+`[ -t 0 ]` to gate the prompt (correct for safety) and `expect` to drive the TTY
+in tests. But `expect` is not universally available and is a heavyweight
+dependency for a single code path.
+
+**Design:** `--yes` skips the prompt; it does not skip the warning about
+dependent jails. The safe default (skip-with-message in non-interactive mode)
+is unchanged for callers that do not pass `--yes`.
+
+**Test impact:**
+- Mock suite: 5 new tests (T92–T96) covering the `--yes` path, unknown-image
+  guard, and that warnings still appear with `--yes`.
+- Integration suite: IT-25 and IT-26 now use `--yes` directly; the `expect`
+  block and its skip fallback are removed. No external tools beyond `incus` are
+  required to run the full integration suite.
+- Total: 91 → 96 mock tests; 28/28 integration tests with 0 skipped.
+
+**Lesson reinforced:** Any confirmation-guarded command that is also meant to be
+scriptable should have `--yes` from the start. See `docs/this_i_learned.md` for
+the full note.

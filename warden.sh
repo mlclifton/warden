@@ -31,7 +31,7 @@ usage() {
   echo "  save-image <jail> <name>                     Save a jail's state as a named image"
   echo "  images                                       List all warden-managed images"
   echo "  image-info <name>                            Show image details and which jails use it"
-  echo "  delete-image <name>                          Delete a warden-managed image"
+  echo "  delete-image <name> [--yes]                  Delete a warden-managed image"
   echo "  doctor                                       Check installation and report any issues"
   echo "  fix-terminal <name>                          Fix terminal/backspace issues in an existing container"
   echo ""
@@ -433,8 +433,8 @@ cmd_save_image() {
   local publish_ok=true
   incus publish "$jail_name" \
     --alias "warden/$image_name" \
-    --property "user.warden.image_name=$image_name" \
-    --property "user.warden.saved_from=$jail_name" || publish_ok=false
+    "user.warden.image_name=$image_name" \
+    "user.warden.saved_from=$jail_name" || publish_ok=false
 
   # Restart if jail was running (attempt regardless of publish outcome)
   if $was_running; then
@@ -531,7 +531,31 @@ cmd_image_info() {
 }
 
 cmd_delete_image() {
-  local image_name=$1
+  local image_name=""
+  local yes_flag=false
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --yes|-y)
+        yes_flag=true
+        ;;
+      -*)
+        log_error "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+      *)
+        if [ -z "$image_name" ]; then
+          image_name="$1"
+        else
+          log_error "Unexpected argument: $1"
+          usage
+          exit 1
+        fi
+        ;;
+    esac
+    shift
+  done
 
   if [ -z "$image_name" ]; then
     log_error "Usage: $0 delete-image <image-name>"
@@ -559,15 +583,17 @@ cmd_delete_image() {
     log_warn "Deleting this image will not affect those jails."
   fi
 
-  # Prompt for confirmation (skip in non-interactive mode)
-  if [ -t 0 ]; then
+  # Determine whether to proceed: --yes skips the prompt; TTY prompts; non-TTY skips
+  if $yes_flag; then
+    : # proceed without prompting
+  elif [ -t 0 ]; then
     read -r -p "Delete image '$image_name'? [y/N] " reply
     if [[ ! $reply =~ ^[Yy]$ ]]; then
       log_info "Deletion cancelled."
       return
     fi
   else
-    log_info "Non-interactive mode: skipping deletion prompt. Run interactively to confirm deletion."
+    log_info "Non-interactive mode: skipping deletion prompt. Use --yes to force deletion."
     return
   fi
 

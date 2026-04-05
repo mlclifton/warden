@@ -61,7 +61,7 @@ For a full breakdown of every command and its effects, refer to the [docs/user_g
 | `save-image` | `save-image <jail> <name>` | Saves a jail's current state as a named warden image. |
 | `images` | `images` | Lists all warden-managed images. |
 | `image-info` | `image-info <name>` | Shows image details and which jails were created from it. |
-| `delete-image`| `delete-image <name>` | Deletes a warden-managed image. |
+| `delete-image`| `delete-image <name> [--yes]` | Deletes a warden-managed image. Pass `--yes` to skip the confirmation prompt. |
 | `doctor` | `doctor` | Validates host dependencies (Incus, jq, git, network). |
 | `fix-terminal`| `fix-terminal <name>`| Installs `ncurses-term` to fix broken backspace/cursor keys. |
 
