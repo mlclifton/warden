@@ -1,7 +1,7 @@
 # Backlog: Custom Jail Images Feature
 
 **FRD:** [docs/newjail_image_frd.md](../docs/newjail_image_frd.md)  
-**Status:** Awaiting FRD approval
+**Status:** Implemented (2026-04-05)
 
 **Scope:** Single-developer "configured starting points" — save a jail state as a named image, create new jails from it, manage the image inventory.
 
@@ -11,7 +11,7 @@ All tasks modify `warden.sh` only unless stated otherwise. Implement in order �
 
 ## Tasks
 
-### TASK-1: Parse `--image` flag in `cmd_create()`
+### TASK-1: Parse `--image` flag in `cmd_create()` ✓ DONE
 
 **File:** `warden.sh` — `cmd_create()` function  
 **What:** Add argument parsing so `create <name> [git_url] [--image <image-name>]` is accepted. The `--image` value should default to `$BASE_IMAGE` if omitted.  
@@ -25,7 +25,7 @@ All tasks modify `warden.sh` only unless stated otherwise. Implement in order �
 
 ---
 
-### TASK-2: Record base image in container config after `create`
+### TASK-2: Record base image in container config after `create` ✓ DONE
 
 **File:** `warden.sh` — `cmd_create()`, after `incus init`  
 **What:** After successfully initialising the container, run:
@@ -38,7 +38,7 @@ where `$image_name` is the short name used (e.g. `base-dev-v2` or `python-ds`).
 
 ---
 
-### TASK-3: Implement `cmd_save_image()`
+### TASK-3: Implement `cmd_save_image()` ✓ DONE
 
 **File:** `warden.sh` — new function  
 **What:** Implement `save-image <jail-name> <image-name>`:
@@ -58,7 +58,7 @@ where `$image_name` is the short name used (e.g. `base-dev-v2` or `python-ds`).
 
 ---
 
-### TASK-4: Implement `cmd_images()`
+### TASK-4: Implement `cmd_images()` ✓ DONE
 
 **File:** `warden.sh` — new function  
 **What:** Implement `images` (no args): list all Incus images whose aliases start with `warden/`. Display a formatted table:
@@ -77,7 +77,7 @@ Use `incus image list --format json | jq` to filter and extract fields.
 
 ---
 
-### TASK-5: Implement `cmd_image_info()`
+### TASK-5: Implement `cmd_image_info()` ✓ DONE
 
 **File:** `warden.sh` — new function  
 **What:** Implement `image-info <image-name>`: display metadata for `warden/<image-name>` and list all current jails whose `user.warden.base_image` config matches `<image-name>`.
@@ -102,7 +102,7 @@ If no jails use the image, print `  (none)`.
 
 ---
 
-### TASK-6: Implement `cmd_delete_image()`
+### TASK-6: Implement `cmd_delete_image()` ✓ DONE
 
 **File:** `warden.sh` — new function  
 **What:** Implement `delete-image <image-name>`:
@@ -120,7 +120,7 @@ If no jails use the image, print `  (none)`.
 
 ---
 
-### TASK-7: Update `usage()` and dispatch
+### TASK-7: Update `usage()` and dispatch ✓ DONE
 
 **File:** `warden.sh` — `usage()` function and `case` block  
 **What:**
@@ -140,7 +140,7 @@ If no jails use the image, print `  (none)`.
 
 ---
 
-### TASK-8: Lint and format
+### TASK-8: Lint and format ✓ DONE (shellcheck passes; shfmt skipped)
 
 **What:** Run `shellcheck warden.sh` and `shfmt -w warden.sh` and fix any issues.  
 **Acceptance:**
@@ -149,7 +149,7 @@ If no jails use the image, print `  (none)`.
 
 ---
 
-### TASK-9: Update documentation
+### TASK-9: Update documentation ✓ DONE
 
 **Files:** `docs/user_guide.md`, `README.md`  
 **What:**

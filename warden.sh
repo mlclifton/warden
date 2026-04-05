@@ -11,23 +11,29 @@ PROFILE="dev-profile"
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 usage() {
   echo "Usage: $0 <command> [arguments]"
   echo ""
   echo "Commands:"
-  echo "  create <name> [git_url]   Create a new dev environment"
-  echo "  connect <name>            Connect to an existing environment"
-  echo "  destroy <name>            Destroy an environment"
-  echo "  list                      List all environments"
-  echo "  doctor                    Check installation and report any issues"
-  echo "  fix-terminal <name>       Fix terminal/backspace issues in an existing container"
+  echo "  create <name> [git_url] [--image <image>]   Create a new dev environment"
+  echo "  connect <name>                               Connect to an existing environment"
+  echo "  destroy <name>                               Destroy an environment"
+  echo "  list                                         List all environments"
+  echo "  save-image <jail> <name>                     Save a jail's state as a named image"
+  echo "  images                                       List all warden-managed images"
+  echo "  image-info <name>                            Show image details and which jails use it"
+  echo "  delete-image <name>                          Delete a warden-managed image"
+  echo "  doctor                                       Check installation and report any issues"
+  echo "  fix-terminal <name>                          Fix terminal/backspace issues in an existing container"
   echo ""
 }
 
@@ -144,15 +150,61 @@ cmd_doctor() {
 }
 
 cmd_create() {
-  local name=$1
-  local git_url=$2
-  local project_dir="$JAIL_ROOT/$name"
+  local name=${1:-}
 
   if [ -z "$name" ]; then
     log_error "Project name required."
     usage
     exit 1
   fi
+  shift
+
+  local git_url=""
+  local image_name="$BASE_IMAGE"
+  local init_image="$BASE_IMAGE"
+
+  # Parse remaining args: [git_url] [--image <name>]
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --image)
+        shift
+        if [ -z "$1" ]; then
+          log_error "--image requires a value."
+          exit 1
+        fi
+        image_name="$1"
+        init_image="warden/$1"
+        ;;
+      -*)
+        log_error "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+      *)
+        if [ -z "$git_url" ]; then
+          git_url="$1"
+        else
+          log_error "Unexpected argument: $1"
+          usage
+          exit 1
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  # Validate custom image exists if --image was specified
+  if [ "$init_image" != "$BASE_IMAGE" ]; then
+    local img_count
+    img_count=$(incus image list --format json | jq --arg a "$init_image" \
+      '[.[] | select(any(.aliases[]; .name == $a))] | length')
+    if [ "$img_count" -eq 0 ]; then
+      log_error "Image '$image_name' not found. Use '$0 images' to see available images."
+      exit 1
+    fi
+  fi
+
+  local project_dir="$JAIL_ROOT/$name"
 
   if incus info "$name" &>/dev/null; then
     log_error "Instance '$name' already exists."
@@ -180,10 +232,13 @@ cmd_create() {
   fi
 
   # 3. Initialize Container
-  log_info "Initializing container from $BASE_IMAGE..."
-  incus init "$BASE_IMAGE" "$name" -p default -p "$PROFILE"
+  log_info "Initializing container from $init_image..."
+  incus init "$init_image" "$name" -p default -p "$PROFILE"
 
-  # 4. Configure ID Mapping (Skipped in favor of shift=true)
+  # 4. Record which image this jail was built from
+  incus config set "$name" user.warden.base_image "$image_name"
+
+  # 5. Configure ID Mapping (Skipped in favor of shift=true)
   # Using shift=true on the disk device handles the mapping cleanly on modern kernels.
 
   log_info "Mounting $project_dir to /home/dev/project..."
@@ -338,6 +393,188 @@ cmd_fix_terminal() {
   log_success "Terminal definitions updated. Try connecting again with './warden.sh connect $name'."
 }
 
+cmd_save_image() {
+  local jail_name=$1
+  local image_name=$2
+
+  if [ -z "$jail_name" ] || [ -z "$image_name" ]; then
+    log_error "Usage: $0 save-image <jail-name> <image-name>"
+    exit 1
+  fi
+
+  # Check jail exists
+  if ! incus info "$jail_name" &>/dev/null; then
+    log_error "Instance '$jail_name' not found."
+    exit 1
+  fi
+
+  # Check alias does not already exist
+  local alias_count
+  alias_count=$(incus image list --format json | jq --arg a "warden/$image_name" \
+    '[.[] | select(any(.aliases[]; .name == $a))] | length')
+  if [ "$alias_count" -gt 0 ]; then
+    log_error "Image '$image_name' already exists. Use '$0 delete-image $image_name' first."
+    exit 1
+  fi
+
+  # Stop jail if running (remember state for restart)
+  local was_running=false
+  if incus info "$jail_name" | grep -q "Status: RUNNING"; then
+    was_running=true
+    log_info "Stopping '$jail_name' for consistent snapshot..."
+    if ! incus stop "$jail_name"; then
+      log_error "Failed to stop '$jail_name'."
+      exit 1
+    fi
+  fi
+
+  # Publish image
+  log_info "Publishing image '$image_name'..."
+  local publish_ok=true
+  incus publish "$jail_name" \
+    --alias "warden/$image_name" \
+    --property "user.warden.image_name=$image_name" \
+    --property "user.warden.saved_from=$jail_name" || publish_ok=false
+
+  # Restart if jail was running (attempt regardless of publish outcome)
+  if $was_running; then
+    log_info "Restarting '$jail_name'..."
+    incus start "$jail_name" || log_warn "Failed to restart '$jail_name'. Start it manually."
+  fi
+
+  if ! $publish_ok; then
+    log_error "Failed to publish image '$image_name'."
+    exit 1
+  fi
+
+  local fingerprint
+  fingerprint=$(incus image info "warden/$image_name" | awk '/^Fingerprint:/ {print $2}')
+  log_success "Image '$image_name' saved (fingerprint: $fingerprint)."
+}
+
+cmd_images() {
+  local json
+  json=$(incus image list --format json 2>/dev/null)
+
+  local warden_images
+  warden_images=$(echo "$json" | jq -r '
+    [.[] | select(any(.aliases[]; .name | startswith("warden/")))] |
+    if length == 0 then empty
+    else .[] | [
+      (.aliases[] | select(.name | startswith("warden/")) | .name[7:]),
+      .fingerprint[0:12],
+      (.size / 1073741824 * 10 | round / 10 | tostring + " GiB"),
+      (.created_at | split(".")[0] | gsub("T"; " ")),
+      (.properties["user.warden.saved_from"] // "-")
+    ] | @tsv
+    end')
+
+  if [ -z "$warden_images" ]; then
+    log_info "No warden-managed images found. Use '$0 save-image' to create one."
+    return
+  fi
+
+  printf "%-16s  %-12s  %-8s  %-19s  %s\n" "NAME" "FINGERPRINT" "SIZE" "CREATED" "SAVED FROM"
+  printf "%-16s  %-12s  %-8s  %-19s  %s\n" \
+    "----------------" "------------" "--------" "-------------------" "----------"
+
+  while IFS=$'\t' read -r name fingerprint size created saved_from; do
+    printf "%-16s  %-12s  %-8s  %-19s  %s\n" "$name" "$fingerprint" "$size" "$created" "$saved_from"
+  done <<<"$warden_images"
+}
+
+cmd_image_info() {
+  local image_name=$1
+
+  if [ -z "$image_name" ]; then
+    log_error "Usage: $0 image-info <image-name>"
+    exit 1
+  fi
+
+  # Check image exists and get its data
+  local alias_count
+  alias_count=$(incus image list --format json | jq --arg a "warden/$image_name" \
+    '[.[] | select(any(.aliases[]; .name == $a))] | length')
+  if [ "$alias_count" -eq 0 ]; then
+    log_error "Image '$image_name' not found."
+    exit 1
+  fi
+
+  local image_data
+  image_data=$(incus image list --format json | jq --arg a "warden/$image_name" \
+    '[.[] | select(any(.aliases[]; .name == $a))] | .[0]')
+
+  local fingerprint size created saved_from
+  fingerprint=$(echo "$image_data" | jq -r '.fingerprint')
+  size=$(echo "$image_data" | jq -r '(.size / 1073741824 * 10 | round / 10 | tostring + " GiB")')
+  created=$(echo "$image_data" | jq -r '.created_at | split(".")[0] | gsub("T"; " ")')
+  saved_from=$(echo "$image_data" | jq -r '.properties["user.warden.saved_from"] // "-"')
+
+  echo "Image: $image_name"
+  echo "  Fingerprint : $fingerprint"
+  echo "  Size        : $size"
+  echo "  Created     : $created"
+  echo "  Saved from  : $saved_from"
+  echo ""
+  echo "Jails created from this image:"
+
+  local jails
+  jails=$(incus list --format json | jq -r --arg img "$image_name" \
+    '.[] | select(.config["user.warden.base_image"] == $img) |
+     "  " + .name + "   (" + .state.status + ")"')
+
+  if [ -z "$jails" ]; then
+    echo "  (none)"
+  else
+    echo "$jails"
+  fi
+}
+
+cmd_delete_image() {
+  local image_name=$1
+
+  if [ -z "$image_name" ]; then
+    log_error "Usage: $0 delete-image <image-name>"
+    exit 1
+  fi
+
+  # Check image exists
+  local alias_count
+  alias_count=$(incus image list --format json | jq --arg a "warden/$image_name" \
+    '[.[] | select(any(.aliases[]; .name == $a))] | length')
+  if [ "$alias_count" -eq 0 ]; then
+    log_error "Image '$image_name' not found."
+    exit 1
+  fi
+
+  # Warn about dependent jails
+  local dependent_jails
+  dependent_jails=$(incus list --format json | jq -r --arg img "$image_name" \
+    '[.[] | select(.config["user.warden.base_image"] == $img) | .name] | join(", ")')
+  if [ -n "$dependent_jails" ]; then
+    local dep_count
+    dep_count=$(incus list --format json | jq --arg img "$image_name" \
+      '[.[] | select(.config["user.warden.base_image"] == $img)] | length')
+    log_warn "$dep_count jail(s) were created from '$image_name' ($dependent_jails)."
+    log_warn "Deleting this image will not affect those jails."
+  fi
+
+  # Prompt for confirmation (skip in non-interactive mode)
+  if [ -t 0 ]; then
+    read -r -p "Delete image '$image_name'? [y/N] " reply
+    if [[ ! $reply =~ ^[Yy]$ ]]; then
+      log_info "Deletion cancelled."
+      return
+    fi
+  else
+    log_info "Non-interactive mode: skipping deletion prompt. Run interactively to confirm deletion."
+    return
+  fi
+
+  incus image delete "warden/$image_name"
+  log_success "Image '$image_name' deleted."
+}
+
 # Main
 if [ $# -lt 1 ]; then
   usage
@@ -359,6 +596,18 @@ destroy)
   ;;
 list)
   cmd_list "$@"
+  ;;
+save-image)
+  cmd_save_image "$@"
+  ;;
+images)
+  cmd_images "$@"
+  ;;
+image-info)
+  cmd_image_info "$@"
+  ;;
+delete-image)
+  cmd_delete_image "$@"
   ;;
 doctor)
   cmd_doctor "$@"

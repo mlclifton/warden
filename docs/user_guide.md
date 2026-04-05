@@ -57,20 +57,29 @@ Creates a new development environment.
 
 **Usage:**
 ```bash
-./warden.sh create <name> [git_url]
+./warden.sh create <name> [git_url] [--image <image>]
 ```
 
 **What it does:**
 1. Creates a directory at `~/jails/<name>` on your host.
 2. (Optional) Clones the provided `git_url` into that directory.
-3. Initializes an Incus container named `<name>` using the `base-dev-v2` image.
+3. Initializes an Incus container named `<name>` from the base image (default: `base-dev-v2`, or a custom warden image if `--image` is given).
 4. Mounts your host directory into the container at `/home/dev/project`.
 5. Starts the container.
 6. Prompts you to set a password for the `dev` user (optional).
 
-**Example:**
+Use `--image <name>` to start from a previously saved warden image instead of the default base. See `save-image` below.
+
+**Examples:**
 ```bash
+# Standard create (uses base-dev-v2)
 ./warden.sh create my-webapp https://github.com/example/my-webapp.git
+
+# Create from a saved warden image
+./warden.sh create my-webapp --image python-ds
+
+# Create from a saved image with a git clone
+./warden.sh create my-webapp https://github.com/example/repo.git --image python-ds
 ```
 
 ### 2. `connect`
@@ -117,7 +126,105 @@ Deletes a development environment.
 ./warden.sh destroy my-webapp
 ```
 
-### 5. `doctor`
+### 5. `save-image`
+Saves a jail's current state as a named warden image so it can be used as a starting point for future jails.
+
+**Usage:**
+```bash
+./warden.sh save-image <jail-name> <image-name>
+```
+
+**What it does:**
+1. Stops the jail temporarily if it is running (for a consistent snapshot).
+2. Publishes the jail as an Incus image with the alias `warden/<image-name>`.
+3. Restarts the jail if it was running.
+4. Reports the image fingerprint on success.
+
+Errors if the jail does not exist or if an image with that name already exists (use `delete-image` first).
+
+**Example:**
+```bash
+./warden.sh save-image my-project python-ds
+# [INFO] Stopping my-project for consistent snapshot...
+# [INFO] Publishing image 'python-ds'...
+# [INFO] Restarting my-project...
+# [SUCCESS] Image 'python-ds' saved (fingerprint: abc123def456...).
+```
+
+---
+
+### 6. `images`
+Lists all warden-managed images.
+
+**Usage:**
+```bash
+./warden.sh images
+```
+
+Displays a table of images created by `save-image`, showing name, fingerprint, size, creation date, and the jail they were saved from. Prints an informational message if no warden images exist.
+
+**Example output:**
+```
+NAME              FINGERPRINT   SIZE      CREATED              SAVED FROM
+----------------  ------------  --------  -------------------  ----------
+python-ds         abc123def456  1.2 GiB   2026-04-05 14:32     my-project
+ml-base           beef00112233  2.1 GiB   2026-04-01 09:10     ml-sandbox
+```
+
+---
+
+### 7. `image-info`
+Shows details about a specific warden image and lists all current jails that were created from it.
+
+**Usage:**
+```bash
+./warden.sh image-info <image-name>
+```
+
+**Example output:**
+```
+Image: python-ds
+  Fingerprint : abc123def456abc123def456
+  Size        : 1.2 GiB
+  Created     : 2026-04-05 14:32:00
+  Saved from  : my-project
+
+Jails created from this image:
+  ds-experiment-1   (Running)
+  ds-experiment-2   (Stopped)
+```
+
+Errors if the image does not exist.
+
+---
+
+### 8. `delete-image`
+Deletes a warden-managed image.
+
+**Usage:**
+```bash
+./warden.sh delete-image <image-name>
+```
+
+**What it does:**
+1. Warns (but does not block) if existing jails were created from this image — those jails remain functional.
+2. Prompts for confirmation before deleting.
+3. Removes the image from Incus.
+
+Skips the confirmation prompt and logs a message in non-interactive mode.
+
+**Example:**
+```bash
+./warden.sh delete-image python-ds
+# [WARN] 2 jail(s) were created from 'python-ds' (ds-experiment-1, ds-experiment-2).
+# [WARN] Deleting this image will not affect those jails.
+# Delete image 'python-ds'? [y/N] y
+# [SUCCESS] Image 'python-ds' deleted.
+```
+
+---
+
+### 9. `doctor`
 Checks your host system for dependencies and reports any configuration issues.
 
 **Usage:**
@@ -125,7 +232,7 @@ Checks your host system for dependencies and reports any configuration issues.
 ./warden.sh doctor
 ```
 
-### 6. `fix-terminal`
+### 10. `fix-terminal`
 Repairs terminal issues (like broken backspace or cursor keys) in an existing container by installing missing terminal definitions (`ncurses-term`).
 
 **Usage:**

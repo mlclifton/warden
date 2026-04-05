@@ -54,12 +54,15 @@ For a full breakdown of every command and its effects, refer to the [docs/user_g
 
 | Command | Usage | Description |
 | :--- | :--- | :--- |
-| `create` | `create <name> [url]` | Creates `~/jails/<name>`, clones git repo (optional), and launches the container. |
+| `create` | `create <name> [url] [--image <image>]` | Creates `~/jails/<name>`, clones git repo (optional), and launches the container from the base or a named image. |
 | `connect` | `connect <name>` | Starts container (if stopped) and connects via SSH + Zellij. |
 | `list` | `list` | Shows all Warden containers and their current status. |
 | `destroy` | `destroy <name>` | Deletes the container and prompts to remove the host project directory. |
+| `save-image` | `save-image <jail> <name>` | Saves a jail's current state as a named warden image. |
+| `images` | `images` | Lists all warden-managed images. |
+| `image-info` | `image-info <name>` | Shows image details and which jails were created from it. |
+| `delete-image`| `delete-image <name>` | Deletes a warden-managed image. |
 | `doctor` | `doctor` | Validates host dependencies (Incus, jq, git, network). |
-| `info` | `info <name>` | Displays detailed metadata about a specific jail. |
 | `fix-terminal`| `fix-terminal <name>`| Installs `ncurses-term` to fix broken backspace/cursor keys. |
 
 ---
