@@ -478,7 +478,11 @@ export MOCK_CONTAINER_LIST="$CONTAINER_LIST_EMPTY"
 
 reset_log
 "$WARDEN" delete-image --yes python-ds >/dev/null 2>&1 || true
-assert_called     "T92 delete-image --yes → incus image delete called"    "^image delete warden/python-ds"
+# Must delete by fingerprint, NOT by alias (passing "warden/<name>" can be misinterpreted
+# by incus as a remote reference, causing "sudo: warden: command not found").
+_expected_fp=$(echo "$IMAGE_LIST_ONE_WARDEN" | jq -r '[.[] | select(any(.aliases[]; .name == "warden/python-ds"))] | .[0].fingerprint')
+assert_called     "T92 delete-image --yes → incus image delete called with fingerprint" "^image delete ${_expected_fp}"
+assert_not_called "T92b delete-image --yes → alias NOT passed to image delete"          "^image delete warden/"
 
 assert_exit       "T93 delete-image --yes: known image → exit 0"          0  "$WARDEN" delete-image --yes python-ds
 assert_not_contains "T94 delete-image --yes: no skip message"  "Non-interactive mode"  "$WARDEN" delete-image --yes python-ds
@@ -608,6 +612,33 @@ reset_log
 assert_called     "T89 create: default → incus init uses base-dev-v2"        "^init base-dev-v2 $JAIL_NAME"
 assert_called     "T90 create: default → config set records base-dev-v2"     "user.warden.base_image base-dev-v2"
 assert_not_called "T91 create: default → image list NOT queried (no --image)" "^image list"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SECTION 8: cmd_create bare non-URL positional arg (regression for image-name-as-git-url bug)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+section "8. cmd_create bare non-URL positional arg"
+
+export MOCK_IMAGE_LIST="$IMAGE_LIST_EMPTY"
+export MOCK_JAIL_EXISTS=""
+
+# T97: a bare word with no URL scheme must be rejected, not passed to git clone
+assert_exit "T97 create: bare non-URL arg → exit 1" \
+  1  "$WARDEN" create myjail not-a-url
+
+# T98: error message should suggest --image, not expose a raw git error
+assert_not_contains "T98 create: bare non-URL arg → no raw git error leaked" \
+  "fatal: repository" "$WARDEN" create myjail not-a-url
+
+# T99: the error output should hint at --image so the user knows what to do
+assert_contains "T99 create: bare non-URL arg → suggests --image flag" \
+  "--image" "$WARDEN" create myjail not-a-url
+
+# T100: exact reproduction of the reported bug — image name without --image flag
+assert_exit "T100 create: image-like name without --image → exit 1" \
+  1  "$WARDEN" create myjail python-ds
+
+assert_contains "T101 create: image-like name without --image → suggests --image flag" \
+  "--image" "$WARDEN" create myjail python-ds
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Summary

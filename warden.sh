@@ -204,6 +204,20 @@ cmd_create() {
     fi
   fi
 
+  # Validate git_url looks like a URL or path before attempting clone.
+  # A bare word (e.g. an image name) silently becomes a git_url otherwise.
+  if [ -n "$git_url" ]; then
+    if [[ "$git_url" != *"://"* ]] && \
+       [[ "$git_url" != /* ]] && \
+       [[ "$git_url" != ./* ]] && \
+       [[ "$git_url" != ../* ]] && \
+       [[ "$git_url" != *@* ]]; then
+      log_error "'$git_url' does not look like a git URL or path."
+      log_info  "To create from a warden image, use: $0 create $name --image $git_url"
+      exit 1
+    fi
+  fi
+
   local project_dir="$JAIL_ROOT/$name"
 
   if incus info "$name" &>/dev/null; then
@@ -597,7 +611,11 @@ cmd_delete_image() {
     return
   fi
 
-  incus image delete "warden/$image_name"
+  local fingerprint
+  fingerprint=$(incus image list --format json | jq -r \
+    --arg a "warden/$image_name" \
+    '[.[] | select(any(.aliases[]; .name == $a))] | .[0].fingerprint')
+  incus image delete "$fingerprint"
   log_success "Image '$image_name' deleted."
 }
 
