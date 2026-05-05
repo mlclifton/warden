@@ -57,18 +57,18 @@ Creates a new development environment.
 
 **Usage:**
 ```bash
-./warden.sh create <name> [git_url] [--image <image>]
+./warden.sh create <name> [git_url] [--from <image>]
 ```
 
 **What it does:**
 1. Creates a directory at `~/jails/<name>` on your host.
 2. (Optional) Clones the provided `git_url` into that directory.
-3. Initializes an Incus container named `<name>` from the base image (default: `base-dev-v2`, or a custom warden image if `--image` is given).
+3. Initializes an Incus container named `<name>` from the base image (default: `base-dev-v2`, or a custom warden image if `--from` is given).
 4. Mounts your host directory into the container at `/home/dev/project`.
 5. Starts the container.
 6. Prompts you to set a password for the `dev` user (optional).
 
-Use `--image <name>` to start from a previously saved warden image instead of the default base. See `save-image` below.
+Use `--from <name>` to start from a previously saved warden image instead of the default base. (The older `--image <name>` flag is still accepted for backward compatibility.)
 
 **Examples:**
 ```bash
@@ -76,14 +76,14 @@ Use `--image <name>` to start from a previously saved warden image instead of th
 ./warden.sh create my-webapp https://github.com/example/my-webapp.git
 
 # Create from a saved warden image
-./warden.sh create my-webapp --image python-ds
+./warden.sh create my-webapp --from python-ds
 
 # Create from a saved image with a git clone
-./warden.sh create my-webapp https://github.com/example/repo.git --image python-ds
+./warden.sh create my-webapp https://github.com/example/repo.git --from python-ds
 ```
 
 ### 2. `connect`
-Connects to an existing environment via SSH and attaches a terminal multiplexer (`zellij`). Note that the initial SSH connection does not required a password.
+Connects to an existing environment via SSH and attaches a terminal multiplexer (`zellij`). Note that the initial SSH connection does not require a password.
 
 **Usage:**
 ```bash
@@ -101,7 +101,37 @@ Connects to an existing environment via SSH and attaches a terminal multiplexer 
 ./warden.sh connect my-webapp
 ```
 
-### 3. `list`
+### 3. `start`
+Starts a stopped jail.
+
+**Usage:**
+```bash
+./warden.sh start <name>
+```
+
+If the jail is already running, an informational message is printed and no action is taken.
+
+### 4. `stop`
+Stops a running jail.
+
+**Usage:**
+```bash
+./warden.sh stop <name>
+```
+
+If the jail is already stopped, an informational message is printed and no action is taken.
+
+### 5. `info`
+Shows details about a jail.
+
+**Usage:**
+```bash
+./warden.sh info <name>
+```
+
+Displays the jail's status, IP address, base image, and host project directory path.
+
+### 6. `list`
 Lists all active development environments and their status.
 
 **Usage:**
@@ -109,29 +139,39 @@ Lists all active development environments and their status.
 ./warden.sh list
 ```
 
-### 4. `destroy`
+### 7. `delete`
 Deletes a development environment.
 
 **Usage:**
 ```bash
-./warden.sh destroy <name>
+./warden.sh delete <name> [--yes]
 ```
 
 **What it does:**
 1. Forcefully deletes the Incus container.
-2. Prompts you to decide whether to delete the project directory on your host (`~/jails/<name>`).
+2. Prompts you to decide whether to delete the project directory on your host (`~/jails/<name>`), unless `--yes` is passed.
+
+Pass `--yes` to skip the container-deletion confirmation prompt (useful in scripts). The project-directory prompt is still shown interactively unless stdin is not a TTY.
 
 **Example:**
 ```bash
-./warden.sh destroy my-webapp
+./warden.sh delete my-webapp
 ```
 
-### 5. `save-image`
+> The older `destroy <name>` command still works as an alias for `delete`.
+
+---
+
+## Image Commands
+
+Image operations are grouped under the `image` subcommand. Legacy flat commands (`save-image`, `images`, `image-info`, `delete-image`) are still accepted for backward compatibility.
+
+### 8. `image save`
 Saves a jail's current state as a named warden image so it can be used as a starting point for future jails.
 
 **Usage:**
 ```bash
-./warden.sh save-image <jail-name> <image-name>
+./warden.sh image save <jail-name> <image-name>
 ```
 
 **What it does:**
@@ -140,28 +180,26 @@ Saves a jail's current state as a named warden image so it can be used as a star
 3. Restarts the jail if it was running.
 4. Reports the image fingerprint on success.
 
-Errors if the jail does not exist or if an image with that name already exists (use `delete-image` first).
+Errors if the jail does not exist or if an image with that name already exists (use `image delete` first).
 
 **Example:**
 ```bash
-./warden.sh save-image my-project python-ds
+./warden.sh image save my-project python-ds
 # [INFO] Stopping my-project for consistent snapshot...
 # [INFO] Publishing image 'python-ds'...
 # [INFO] Restarting my-project...
 # [SUCCESS] Image 'python-ds' saved (fingerprint: abc123def456...).
 ```
 
----
-
-### 6. `images`
+### 9. `image list`
 Lists all warden-managed images.
 
 **Usage:**
 ```bash
-./warden.sh images
+./warden.sh image list
 ```
 
-Displays a table of images created by `save-image`, showing name, fingerprint, size, creation date, and the jail they were saved from. Prints an informational message if no warden images exist.
+Displays a table of images created by `image save`, showing name, fingerprint, size, creation date, and the jail they were saved from. Prints an informational message if no warden images exist.
 
 **Example output:**
 ```
@@ -171,14 +209,12 @@ python-ds         abc123def456  1.2 GiB   2026-04-05 14:32     my-project
 ml-base           beef00112233  2.1 GiB   2026-04-01 09:10     ml-sandbox
 ```
 
----
-
-### 7. `image-info`
+### 10. `image info`
 Shows details about a specific warden image and lists all current jails that were created from it.
 
 **Usage:**
 ```bash
-./warden.sh image-info <image-name>
+./warden.sh image info <image-name>
 ```
 
 **Example output:**
@@ -196,14 +232,12 @@ Jails created from this image:
 
 Errors if the image does not exist.
 
----
-
-### 8. `delete-image`
+### 11. `image delete`
 Deletes a warden-managed image.
 
 **Usage:**
 ```bash
-./warden.sh delete-image <image-name> [--yes]
+./warden.sh image delete <image-name> [--yes]
 ```
 
 **What it does:**
@@ -211,26 +245,24 @@ Deletes a warden-managed image.
 2. Prompts for confirmation before deleting (unless `--yes` is passed).
 3. Removes the image from Incus.
 
-Pass `--yes` (or `-y`) to skip the confirmation prompt — useful in scripts. In
-non-interactive mode without `--yes`, the command logs a message and exits
-without deleting.
+Pass `--yes` (or `-y`) to skip the confirmation prompt — useful in scripts. In non-interactive mode without `--yes`, the command logs a message and exits without deleting.
 
 **Example:**
 ```bash
-./warden.sh delete-image python-ds
+./warden.sh image delete python-ds
 # [WARN] 2 jail(s) were created from 'python-ds' (ds-experiment-1, ds-experiment-2).
 # [WARN] Deleting this image will not affect those jails.
 # Delete image 'python-ds'? [y/N] y
 # [SUCCESS] Image 'python-ds' deleted.
 
 # Non-interactive / scripted:
-./warden.sh delete-image python-ds --yes
+./warden.sh image delete python-ds --yes
 # [SUCCESS] Image 'python-ds' deleted.
 ```
 
 ---
 
-### 9. `doctor`
+### 12. `doctor`
 Checks your host system for dependencies and reports any configuration issues.
 
 **Usage:**
@@ -238,7 +270,7 @@ Checks your host system for dependencies and reports any configuration issues.
 ./warden.sh doctor
 ```
 
-### 10. `fix-terminal`
+### 13. `fix-terminal`
 Repairs terminal issues (like broken backspace or cursor keys) in an existing container by installing missing terminal definitions (`ncurses-term`).
 
 **Usage:**

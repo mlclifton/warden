@@ -20,8 +20,8 @@ Warden is a CLI utility for managing isolated, high-performance development envi
 # 5. List all active sandboxes
 ./warden.sh list
 
-# 6. Destroy a sandbox when finished
-./warden.sh destroy my-project
+# 6. Delete a sandbox when finished (use --yes to skip the prompt)
+./warden.sh delete my-project
 ```
 
 See the [docs/user_guide.md](docs/user_guide.md) for more detailed usage instructions.
@@ -50,20 +50,39 @@ Warden uses **Incus** (a modern fork of LXD) to provide VM-like isolation with t
 
 ## 🛠️ Command Reference
 
+Commands are grouped by object: **jail commands** (unprefixed), **image commands** (`image <subcommand>`), and **utility commands**.
+
 For a full breakdown of every command and its effects, refer to the [docs/user_guide.md](docs/user_guide.md).
+
+### Jail Commands
 
 | Command | Usage | Description |
 | :--- | :--- | :--- |
-| `create` | `create <name> [url] [--image <image>]` | Creates `~/jails/<name>`, clones git repo (optional), and launches the container from the base or a named image. |
+| `create` | `create <name> [url] [--from <image>]` | Creates `~/jails/<name>`, clones git repo (optional), and launches the container from the base or a named image. |
 | `connect` | `connect <name>` | Starts container (if stopped) and connects via SSH + Zellij. |
+| `start` | `start <name>` | Starts a stopped jail. |
+| `stop` | `stop <name>` | Stops a running jail. |
+| `info` | `info <name>` | Shows jail details: state, IP, base image, and project directory. |
+| `delete` | `delete <name> [--yes]` | Deletes the container and prompts to remove the host project directory. Pass `--yes` to skip the prompt. |
 | `list` | `list` | Shows all Warden containers and their current status. |
-| `destroy` | `destroy <name>` | Deletes the container and prompts to remove the host project directory. |
-| `save-image` | `save-image <jail> <name>` | Saves a jail's current state as a named warden image. |
-| `images` | `images` | Lists all warden-managed images. |
-| `image-info` | `image-info <name>` | Shows image details and which jails were created from it. |
-| `delete-image`| `delete-image <name> [--yes]` | Deletes a warden-managed image. Pass `--yes` to skip the confirmation prompt. |
+
+### Image Commands
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `image save` | `image save <jail> <name>` | Saves a jail's current state as a named warden image. |
+| `image list` | `image list` | Lists all warden-managed images. |
+| `image info` | `image info <name>` | Shows image details and which jails were created from it. |
+| `image delete`| `image delete <name> [--yes]` | Deletes a warden-managed image. Pass `--yes` to skip the confirmation prompt. |
+
+### Utility Commands
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
 | `doctor` | `doctor` | Validates host dependencies (Incus, jq, git, network). |
 | `fix-terminal`| `fix-terminal <name>`| Installs `ncurses-term` to fix broken backspace/cursor keys. |
+
+> **Legacy aliases:** `destroy`, `save-image`, `images`, `image-info`, and `delete-image` still work for backward compatibility.
 
 ---
 

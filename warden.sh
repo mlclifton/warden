@@ -23,17 +23,30 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 usage() {
   echo "Usage: $0 <command> [arguments]"
   echo ""
-  echo "Commands:"
-  echo "  create <name> [git_url] [--image <image>]   Create a new dev environment"
-  echo "  connect <name>                               Connect to an existing environment"
-  echo "  destroy <name>                               Destroy an environment"
-  echo "  list                                         List all environments"
-  echo "  save-image <jail> <name>                     Save a jail's state as a named image"
-  echo "  images                                       List all warden-managed images"
-  echo "  image-info <name>                            Show image details and which jails use it"
-  echo "  delete-image <name> [--yes]                  Delete a warden-managed image"
+  echo "Jail commands:"
+  echo "  create <name> [url] [--from <image>]         Create a new jail"
+  echo "  connect <name>                               Connect to a jail (auto-starts if stopped)"
+  echo "  start <name>                                 Start a stopped jail"
+  echo "  stop <name>                                  Stop a running jail"
+  echo "  info <name>                                  Show jail details"
+  echo "  delete <name> [--yes]                        Delete a jail"
+  echo "  destroy <name>                               Alias for delete"
+  echo "  list                                         List all jails"
+  echo ""
+  echo "Image commands:"
+  echo "  image save <jail> <name>                     Save a jail's state as a named image"
+  echo "  image list                                   List all warden-managed images"
+  echo "  image info <name>                            Show image details and derived jails"
+  echo "  image delete <name> [--yes]                  Delete a warden-managed image"
+  echo ""
+  echo "  save-image <jail> <name>                     Alias for image save"
+  echo "  images                                       Alias for image list"
+  echo "  image-info <name>                            Alias for image info"
+  echo "  delete-image <name> [--yes]                  Alias for image delete"
+  echo ""
+  echo "Utility commands:"
   echo "  doctor                                       Check installation and report any issues"
-  echo "  fix-terminal <name>                          Fix terminal/backspace issues in an existing container"
+  echo "  fix-terminal <name>                          Fix terminal/backspace issues in a jail"
   echo ""
 }
 
@@ -163,13 +176,14 @@ cmd_create() {
   local image_name="$BASE_IMAGE"
   local init_image="$BASE_IMAGE"
 
-  # Parse remaining args: [git_url] [--image <name>]
+  # Parse remaining args: [git_url] [--from <name> | --image <name>]
   while [ $# -gt 0 ]; do
     case "$1" in
-      --image)
+      --from|--image)
+        local _flag="$1"
         shift
-        if [ -z "$1" ]; then
-          log_error "--image requires a value."
+        if [ -z "${1:-}" ]; then
+          log_error "$_flag requires a value."
           exit 1
         fi
         image_name="$1"
@@ -193,13 +207,13 @@ cmd_create() {
     shift
   done
 
-  # Validate custom image exists if --image was specified
+  # Validate custom image exists if --from/--image was specified
   if [ "$init_image" != "$BASE_IMAGE" ]; then
     local img_count
     img_count=$(incus image list --format json | jq --arg a "$init_image" \
       '[.[] | select(any(.aliases[]; .name == $a))] | length')
     if [ "$img_count" -eq 0 ]; then
-      log_error "Image '$image_name' not found. Use '$0 images' to see available images."
+      log_error "Image '$image_name' not found. Use '$0 image list' to see available images."
       exit 1
     fi
   fi
@@ -291,6 +305,78 @@ cmd_create() {
   log_info "Connect using: $0 connect $name"
 }
 
+cmd_start() {
+  local name=$1
+  if [ -z "$name" ]; then
+    log_error "Project name required."
+    usage
+    exit 1
+  fi
+
+  if ! incus info "$name" &>/dev/null; then
+    log_error "Instance '$name' not found."
+    exit 1
+  fi
+
+  if incus info "$name" | grep -q "Status: RUNNING"; then
+    log_info "Container '$name' is already running."
+    return 0
+  fi
+
+  log_info "Starting container '$name'..."
+  incus start "$name"
+  log_success "Container '$name' started."
+}
+
+cmd_stop() {
+  local name=$1
+  if [ -z "$name" ]; then
+    log_error "Project name required."
+    usage
+    exit 1
+  fi
+
+  if ! incus info "$name" &>/dev/null; then
+    log_error "Instance '$name' not found."
+    exit 1
+  fi
+
+  if ! incus info "$name" | grep -q "Status: RUNNING"; then
+    log_info "Container '$name' is already stopped."
+    return 0
+  fi
+
+  log_info "Stopping container '$name'..."
+  incus stop "$name"
+  log_success "Container '$name' stopped."
+}
+
+cmd_info() {
+  local name=$1
+  if [ -z "$name" ]; then
+    log_error "Project name required."
+    usage
+    exit 1
+  fi
+
+  if ! incus info "$name" &>/dev/null; then
+    log_error "Instance '$name' not found."
+    exit 1
+  fi
+
+  local status ip base_image project_dir
+  status=$(incus info "$name" | grep "Status:" | awk '{print $2}')
+  ip=$(incus list "$name" --format json | jq -r '.[0].state.network.eth0.addresses[] | select(.family=="inet") | .address' | head -n 1)
+  base_image=$(incus config get "$name" user.warden.base_image 2>/dev/null || echo "-")
+  project_dir="$JAIL_ROOT/$name"
+
+  echo "Jail: $name"
+  echo "  Status      : $status"
+  echo "  IP          : ${ip:-"-"}"
+  echo "  Base image  : $base_image"
+  echo "  Project dir : $project_dir"
+}
+
 cmd_connect() {
   local name=$1
   if [ -z "$name" ]; then
@@ -333,8 +419,33 @@ cmd_connect() {
   "
 }
 
-cmd_destroy() {
-  local name=$1
+cmd_delete() {
+  local name=""
+  local yes_flag=false
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --yes|-y)
+        yes_flag=true
+        ;;
+      -*)
+        log_error "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+      *)
+        if [ -z "$name" ]; then
+          name="$1"
+        else
+          log_error "Unexpected argument: $1"
+          usage
+          exit 1
+        fi
+        ;;
+    esac
+    shift
+  done
+
   if [ -z "$name" ]; then
     log_error "Project name required."
     usage
@@ -346,11 +457,24 @@ cmd_destroy() {
     exit 1
   fi
 
-  log_info "Destroying container $name..."
+  # Determine whether to proceed: --yes skips the prompt; TTY prompts; non-TTY skips
+  if $yes_flag; then
+    : # proceed without prompting
+  elif [ -t 0 ]; then
+    read -r -p "Delete jail '$name'? [y/N] " reply
+    if [[ ! $reply =~ ^[Yy]$ ]]; then
+      log_info "Deletion cancelled."
+      return
+    fi
+  else
+    log_info "Non-interactive mode: skipping deletion prompt. Use --yes to force deletion."
+    return
+  fi
+
+  log_info "Deleting container $name..."
   incus delete "$name" --force
 
   log_info "Note: Project directory $JAIL_ROOT/$name was NOT deleted."
-  # Non-interactive check if needed, but for now interactive
   if [ -t 0 ]; then
     read -p "Delete project directory? [y/N] " -n 1 -r
     echo
@@ -361,6 +485,11 @@ cmd_destroy() {
   else
     log_info "Skipping directory deletion prompt (non-interactive)."
   fi
+}
+
+cmd_destroy() {
+  # Backward-compatible alias for cmd_delete
+  cmd_delete "$@"
 }
 
 cmd_list() {
@@ -619,6 +748,42 @@ cmd_delete_image() {
   log_success "Image '$image_name' deleted."
 }
 
+cmd_image() {
+  if [ $# -lt 1 ]; then
+    log_error "Usage: $0 image <subcommand> [arguments]"
+    echo ""
+    echo "Subcommands:"
+    echo "  image save   <jail> <name>  Save a jail's state as a named image"
+    echo "  image list                  List all warden-managed images"
+    echo "  image info   <name>         Show image details and derived jails"
+    echo "  image delete <name> [--yes] Delete a warden-managed image"
+    exit 1
+  fi
+
+  local subcommand="$1"
+  shift
+
+  case "$subcommand" in
+    save)
+      cmd_save_image "$@"
+      ;;
+    list)
+      cmd_images
+      ;;
+    info)
+      cmd_image_info "$@"
+      ;;
+    delete)
+      cmd_delete_image "$@"
+      ;;
+    *)
+      log_error "Unknown image subcommand: $subcommand"
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 # Main
 if [ $# -lt 1 ]; then
   usage
@@ -634,6 +799,18 @@ create)
   ;;
 connect)
   cmd_connect "$@"
+  ;;
+start)
+  cmd_start "$@"
+  ;;
+stop)
+  cmd_stop "$@"
+  ;;
+info)
+  cmd_info "$@"
+  ;;
+delete)
+  cmd_delete "$@"
   ;;
 destroy)
   cmd_destroy "$@"
@@ -652,6 +829,9 @@ image-info)
   ;;
 delete-image)
   cmd_delete_image "$@"
+  ;;
+image)
+  cmd_image "$@"
   ;;
 doctor)
   cmd_doctor "$@"
